@@ -289,10 +289,10 @@
     const ordered = [];
     // Kociemba/cubejs facelet order: U, R, F, D, L, B.
     for (const z of [-1,0,1]) for (const x of [-1,0,1]) ordered.push([x,1,z,'U']);
-    for (const y of [1,0,-1]) for (const z of [-1,0,1]) ordered.push([1,y,z,'R']);
+    for (const y of [1,0,-1]) for (const z of [1,0,-1]) ordered.push([1,y,z,'R']);
     for (const y of [1,0,-1]) for (const x of [-1,0,1]) ordered.push([x,y,1,'F']);
     for (const z of [1,0,-1]) for (const x of [-1,0,1]) ordered.push([x,-1,z,'D']);
-    for (const y of [1,0,-1]) for (const z of [1,0,-1]) ordered.push([-1,y,z,'L']);
+    for (const y of [1,0,-1]) for (const z of [-1,0,1]) ordered.push([-1,y,z,'L']);
     for (const y of [1,0,-1]) for (const x of [1,0,-1]) ordered.push([x,y,-1,'B']);
     const colorToFace = Object.fromEntries(Object.entries(colors).map(([face,color])=>[color,face]));
     return ordered.map(([x,y,z,face])=>{
