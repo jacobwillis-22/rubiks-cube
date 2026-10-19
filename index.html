@@ -417,9 +417,6 @@
   }
 
 
-  const hintPanel = app.querySelector('#c-hint-panel');
-  const hintClose = app.querySelector('#c-hint-close');
-
   function setHintPanel(open) {
     hintPanel.classList.toggle('open', open);
     hintPanel.setAttribute('aria-hidden', String(!open));
