@@ -73,6 +73,38 @@
   }
   .update-panel strong { display: block; margin-bottom: 3px; }
   #cube-app.fullscreen-mode .update-panel, #cube-app:fullscreen .update-panel { display: none; }
+
+  .hint-toggle {
+    position: fixed; right: 18px; bottom: 18px; z-index: 10001;
+    width: 54px; height: 54px; border-radius: 50%; padding: 0;
+    font-size: 25px; line-height: 1; background: #facc15; color: #27200a;
+    border: 2px solid #ffffffb8; box-shadow: 0 5px 22px #0005;
+  }
+  .hint-panel {
+    position: fixed; z-index: 10000; top: 0; right: 0; bottom: 0;
+    width: min(360px, 92vw); box-sizing: border-box; padding: 22px 20px 28px;
+    overflow-y: auto; background: Canvas; color: CanvasText;
+    border-left: 1px solid #8886; box-shadow: -12px 0 35px #0003;
+    transform: translateX(110%); visibility: hidden;
+    transition: transform .24s ease, visibility .24s;
+  }
+  .hint-panel.open { transform: translateX(0); visibility: visible; }
+  .hint-header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .hint-kicker { font-size:10px; letter-spacing: .16em; font-weight:800; opacity:.6; }
+  .hint-title { font-size:23px; font-weight:850; margin-top:3px; }
+  .hint-close { font-size:28px; padding:2px 10px; line-height:1.2; }
+  .hint-progress { margin-top:22px; font-size:12px; font-weight:800; color:#2563eb; text-transform:uppercase; letter-spacing:.06em; }
+  #c-hint-heading { font-size:20px; margin:8px 0; }
+  #c-hint-text { font-size:14px; line-height:1.55; }
+  .hint-tip { margin-top:18px; padding:14px; border-radius:12px; background:color-mix(in srgb, #2563eb 10%, Canvas); border:1px solid #2563eb35; font-size:13px; line-height:1.5; }
+  .hint-tip p { margin:5px 0 0; }
+  .hint-steps { margin-top:20px; font-size:13px; }
+  .hint-mini-title { font-weight:800; }
+  .hint-steps ol { padding-left:22px; line-height:1.85; margin:8px 0; }
+  .hint-note { font-size:11px; line-height:1.5; opacity:.65; margin-top:20px; }
+  @media (prefers-reduced-motion: reduce) { .hint-panel { transition:none; } }
+  #cube-app.fullscreen-mode .hint-panel, #cube-app:fullscreen .hint-panel { position:fixed; }
+
   /* The cube needs to receive vertical as well as horizontal touch drags.
      Scroll the page by swiping outside the cube stage. */
   .stage { touch-action: none; }
@@ -126,6 +158,25 @@
   <div id="c-status" class="muted" role="status" style="margin-top:10px">
     Grab a sticker and drag in the direction you want its row or column to move. Drag the empty background to rotate your view.
   </div>
+
+  <button id="c-hint-toggle" class="hint-toggle" type="button" aria-label="Open solving hints" aria-expanded="false" title="Solving hints">💡</button>
+  <aside id="c-hint-panel" class="hint-panel" aria-hidden="true">
+    <div class="hint-header">
+      <div><div class="hint-kicker">CUBE COACH</div><div class="hint-title">Your next step</div></div>
+      <button id="c-hint-close" class="hint-close" type="button" aria-label="Close hints">×</button>
+    </div>
+    <div id="c-hint-progress" class="hint-progress">Step 1 of 7</div>
+    <h3 id="c-hint-heading">Make the white cross</h3>
+    <p id="c-hint-text">Find the four white edge pieces and bring them around the white center.</p>
+    <div class="hint-tip"><strong>Quick tip</strong><p id="c-hint-tip">Match each edge's side color with the center of that same color. The cross should look like a white plus, with all four side colors lined up too.</p></div>
+    <div class="hint-steps">
+      <div class="hint-mini-title">Beginner method</div>
+      <ol>
+        <li>White cross</li><li>White corners</li><li>Middle-layer edges</li><li>Yellow cross</li><li>Match yellow edges</li><li>Position yellow corners</li><li>Twist yellow corners</li>
+      </ol>
+    </div>
+    <p class="hint-note">Hints update as you turn the cube. This coach checks key layer milestones and gives beginner guidance; it isn't a full move-by-move solver for every scramble.</p>
+  </aside>
 </div>
 
 <script>
@@ -192,7 +243,57 @@
 
   let solved;
 
+
+  const hintToggle = app.querySelector('#c-hint-toggle');
+  const hintPanel = app.querySelector('#c-hint-panel');
+  const hintClose = app.querySelector('#c-hint-close');
+
+  function setHintPanel(open) {
+    hintPanel.classList.toggle('open', open);
+    hintPanel.setAttribute('aria-hidden', String(!open));
+    hintToggle.setAttribute('aria-expanded', String(open));
+    hintToggle.setAttribute('aria-label', open ? 'Close solving hints' : 'Open solving hints');
+    hintToggle.textContent = open ? '✕' : '💡';
+  }
+  hintToggle.addEventListener('click', () => setHintPanel(!hintPanel.classList.contains('open')));
+  hintClose.addEventListener('click', () => setHintPanel(false));
+  document.addEventListener('keydown', e => { if(e.key==='Escape') setHintPanel(false); });
+
+  function guideStage() {
+    if (signature() === solved) return {step:7, heading:'Cube solved! 🎉', text:'Every piece is back where it belongs. You did it!', tip:'Tap Scramble when you want another round.'};
+    let whiteCross=0, whiteCorners=0, middleEdges=0, yellowCross=0;
+    for (const p of pieces) {
+      const [x,y,z]=p.p;
+      const sideX=x===1?'R':x===-1?'L':null;
+      const sideZ=z===1?'F':z===-1?'B':null;
+      if (y===1 && p.s.U===colors.U && (x===0 || z===0) && (x!==0 || z!==0)) {
+        const side = sideX || sideZ;
+        if (side && p.s[side]===colors[side]) whiteCross++;
+      }
+      if (y===1 && p.s.U===colors.U && x!==0 && z!==0 &&
+          p.s[sideX]===colors[sideX] && p.s[sideZ]===colors[sideZ]) whiteCorners++;
+      if (y===0 && x!==0 && z!==0 &&
+          p.s[sideX]===colors[sideX] && p.s[sideZ]===colors[sideZ]) middleEdges++;
+      if (y===-1 && p.s.D===colors.D && (x===0 || z===0) && (x!==0 || z!==0)) yellowCross++;
+    }
+    if (whiteCross<4) return {step:1, heading:'Make the white cross', text:`Your white cross has ${whiteCross} of 4 edge pieces correctly placed.`, tip:'Find a white edge, bring it to the white face, and line up its other color with the matching side center. Keep the white center as the middle of your plus sign.'};
+    if (whiteCorners<4) return {step:2, heading:'Finish the white corners', text:`The white cross is lined up! ${whiteCorners} of 4 white corners are correctly placed.`, tip:'Keep white on the bottom if that is comfortable. Bring a white corner above the slot between its two matching side colors, then use a beginner corner-insertion move until it drops in correctly.'};
+    if (middleEdges<4) return {step:3, heading:'Solve the middle layer', text:`The white layer looks complete. ${middleEdges} of 4 middle-layer edges are correctly placed.`, tip:'Find a top-layer edge with no yellow. Match its front color to the center, then insert it left or right. Common algorithms: U L U′ L′ U′ F′ U F (left) and U′ R′ U R U F U′ F′ (right).'};
+    if (yellowCross<4) return {step:4, heading:'Make the yellow cross', text:`The first two layers appear complete. The yellow cross currently has ${yellowCross} of 4 edge pieces.`, tip:'Look at the yellow face from above. Use F R U R′ U′ F′ to build the yellow cross; depending on the pattern, you may need to repeat it while holding the line or L shape in the correct position.'};
+    return {step:5, heading:'Finish the yellow layer', text:'The yellow cross is made. Next, align the yellow edge colors with their side centers, then position and twist the yellow corners.', tip:'Turn U to see whether yellow edge side colors match their centers. After the edges, use a beginner last-layer corner-positioning and corner-twisting method. Go slowly and keep the cube orientation fixed.'};
+  }
+
+  function updateHint() {
+    const g=guideStage();
+    app.querySelector('#c-hint-progress').textContent = g.heading.startsWith('Cube solved') ? 'Complete' : `Step ${g.step} of 7`;
+    app.querySelector('#c-hint-heading').textContent = g.heading;
+    app.querySelector('#c-hint-text').textContent = g.text;
+    app.querySelector('#c-hint-tip').textContent = g.tip;
+  }
+
+
   function metrics() {
+    updateHint();
     app.querySelector('#c-count').textContent = count;
     app.querySelector('#c-state').textContent =
       signature()===solved ? 'Solved' : 'In progress';
