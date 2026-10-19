@@ -918,8 +918,6 @@
           letter.className = 'face-letter';
           letter.textContent = d;
           letter.setAttribute('aria-hidden', 'true');
-          // Counter-rotate the label in the sticker plane so its glyph stays upright as the cube is flipped.
-          letter.style.transform = `translateZ(0.6px) rotateZ(${-vx}deg)`;
           f.appendChild(letter);
           f.tabIndex=0;
           f.setAttribute('role','button');
@@ -939,8 +937,17 @@
 
     root.replaceChildren(fragment);
     root.style.transform=`scale(${zoom}) rotateX(${vx}deg) rotateY(${vy}deg)`;
-    root.querySelectorAll('.face-letter').forEach(letter => { letter.style.transform = `translateZ(0.6px) rotateZ(${-vx}deg)`; });
+    updateFaceLetterTransforms();
     metrics();
+  }
+
+  function updateFaceLetterTransforms() {
+    // Billboard each label toward the viewer, while keeping its anchor on the center sticker.
+    const inverseFace = { F:'', B:'rotateY(-180deg)', R:'rotateY(-90deg)', L:'rotateY(90deg)', U:'rotateX(-90deg)', D:'rotateX(90deg)' };
+    root.querySelectorAll('.face-letter').forEach(letter => {
+      const dir = letter.parentElement?.dataset.dir || 'F';
+      letter.style.transform = `${inverseFace[dir]} rotateY(${-vy}deg) rotateX(${-vx}deg) translateZ(0.6px)`;
+    });
   }
 
   function rotateVector(a,k,s) {
@@ -1099,6 +1106,7 @@
       if (pinchStartDistance > 0) {
         zoom = Math.max(0.6, Math.min(2.5, pinchStartZoom * distance / pinchStartDistance));
         root.style.transform = `scale(${zoom}) rotateX(${vx}deg) rotateY(${vy}deg)`;
+        updateFaceLetterTransforms();
       }
       event.preventDefault();
       return;
