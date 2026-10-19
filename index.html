@@ -121,7 +121,10 @@
   .solver-progress { font-size: 12px; font-weight: 800; margin-top: 12px; }
   .solution-list { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.8; margin-top: 7px; overflow-wrap: anywhere; }
   .solution-list .solution-stage-heading { margin-top: 10px; padding: 5px 7px; border-radius: 6px; background: color-mix(in srgb, #2563eb 12%, Canvas); font-family: inherit; font-weight: 800; line-height: 1.4; }
+  .solution-list .solution-move { display: inline-block; cursor: pointer; border-radius: 4px; padding: 1px 3px; text-decoration: underline dotted; text-underline-offset: 3px; }
+  .solution-list .solution-move:hover, .solution-list .solution-move:focus-visible { outline: 2px solid #64748b; outline-offset: 1px; }
   .solution-list .current-move { background: #facc15; color: #27200a; border-radius: 4px; padding: 2px 4px; font-weight: 900; }
+  .solution-list .selected-move { box-shadow: 0 0 0 2px #3b82f6; }
   .solver-buttons { display: flex; gap: 8px; margin-top: 12px; }
   .solver-buttons button { flex: 1; font-size: 12px; padding: 9px 6px; }
   .solver-step-size { width: 100%; margin-top: 6px; padding: 10px; border: 1px solid #8886; border-radius: 10px; background: Canvas; color: CanvasText; color-scheme: light dark; font: inherit; }
@@ -316,6 +319,7 @@
   let solutionStages = [];
   let solutionCalculated = false;
   let solutionIndex = 0;
+  let selectedSolutionIndex = null;
   let solutionExpectedState = null;
   let solverReady = false;
   let solverInitializing = false;
@@ -460,6 +464,26 @@
     return 'Turn the ' + faceName + ' layer ' + turn + '. ' + why + reminder;
   }
 
+  function explainSelectedMove(move, stageName, index, total) {
+    const faces = { U: 'top', D: 'bottom', L: 'left', R: 'right', F: 'front', B: 'back' };
+    const face = faces[move[0]] || 'chosen';
+    const turn = move.endsWith('2') ? 'Turn it halfway around (180 degrees).' :
+      move.endsWith("'") ? 'Turn it counterclockwise (90 degrees).' : 'Turn it clockwise (90 degrees).';
+    const reasons = {
+      'White cross': 'This helps put a white edge in the right place to build the white plus sign.',
+      'White corners': 'This helps move a white corner into place without losing the white cross.',
+      'Middle-layer edges': 'This helps move an edge into the middle row while keeping the solved bottom layer together.',
+      'Yellow cross': 'This helps turn the yellow edge pieces so yellow faces up and makes the yellow cross.',
+      'Match yellow edges': 'This helps move the yellow edges around until their side colors match the center colors.',
+      'Position yellow corners': 'This helps move the yellow corners to the correct corners, even if yellow is not facing up yet.',
+      'Twist yellow corners': 'This helps turn a yellow corner the right way while the other moves keep the rest of the cube together.'
+    };
+    const reason = reasons[stageName] || 'This is one part of the move sequence that brings the cube closer to solved.';
+    const suffix = move.endsWith('2') ? ' The 2 means do a half-turn.' :
+      move.endsWith("'") ? ' The apostrophe means turn the other way.' : '';
+    return 'Move ' + (index + 1) + ' of ' + total + ': ' + move + '. Turn the ' + face + ' layer. ' + turn + ' ' + reason + suffix;
+  }
+
   function currentSolutionStage() {
     let cursor = 0;
     for (let i = 0; i < solutionStages.length; i++) {
@@ -473,6 +497,7 @@
   function updateSolutionUI() {
     const loaded = solutionCalculated;
     const current = currentSolutionStage();
+    const displayIndex = selectedSolutionIndex !== null && selectedSolutionIndex < solutionMoves.length ? selectedSolutionIndex : solutionIndex;
     solutionProgress.textContent = loaded
       ? (solutionIndex >= solutionMoves.length ? 'Solution complete! 🎉' :
         `Stage ${current.index + 1} of 7 · ${current.stage.name} · Move ${solutionIndex + 1} of ${solutionMoves.length}`)
@@ -497,7 +522,12 @@
         if (globalIndex) solutionList.appendChild(document.createTextNode(' '));
         const token = document.createElement('span');
         token.textContent = move;
-        if (globalIndex === solutionIndex && solutionIndex < solutionMoves.length) token.className = 'current-move';
+        token.className = 'solution-move' + (globalIndex === solutionIndex && solutionIndex < solutionMoves.length ? ' current-move' : '') +
+          (globalIndex === displayIndex ? ' selected-move' : '');
+        token.dataset.solutionMoveIndex = String(globalIndex);
+        token.setAttribute('role', 'button');
+        token.setAttribute('tabindex', '0');
+        token.setAttribute('aria-label', 'Explain move ' + move + ', move ' + (globalIndex + 1));
         solutionList.appendChild(token);
         globalIndex++;
       });
@@ -505,8 +535,16 @@
     if (solutionIndex >= solutionMoves.length) {
       moveExplanation.innerHTML = '<strong>Beginner method complete! 🎉</strong>All seven stages are finished: the white cross, white corners, middle layer, yellow cross, matching yellow edges, positioning yellow corners, and twisting yellow corners.';
     } else {
-      moveExplanation.innerHTML = '<strong>Stage ' + (current.index + 1) + ' of 7 · ' + current.stage.name + '</strong>' +
-        explainMove(solutionMoves[solutionIndex], solutionIndex, solutionMoves.length);
+      let selectedStage = null, cursor = 0;
+      for (let i = 0; i < solutionStages.length; i++) {
+        if (displayIndex < cursor + solutionStages[i].moves.length) { selectedStage = solutionStages[i]; break; }
+        cursor += solutionStages[i].moves.length;
+      }
+      const selectedStageName = selectedStage ? selectedStage.name : (current ? current.stage.name : 'Beginner method');
+      moveExplanation.innerHTML = '<strong>' + (displayIndex === solutionIndex ? 'Next move' : 'Selected move') +
+        ' · ' + selectedStageName + '</strong>' +
+        explainSelectedMove(solutionMoves[displayIndex], selectedStageName, displayIndex, solutionMoves.length) +
+        (displayIndex !== solutionIndex ? '<p>This only shows the explanation. Press “Do 1 move” when you are ready to turn the cube.</p>' : '');
     }
   }
 
@@ -632,6 +670,7 @@
       solutionMoves=result.moves || [];
       solutionCalculated=true;
       solutionIndex=0;
+      selectedSolutionIndex=null;
       solutionExpectedState=signature();
       if(!solutionMoves.length) {
         solverStatus.textContent='This cube is already solved. 🎉';
@@ -644,6 +683,7 @@
       solutionStages=[];
       solutionCalculated=false;
       solutionIndex=0;
+      selectedSolutionIndex=null;
       solutionExpectedState=null;
       solverStatus.textContent='The beginner-method solver could not finish. You can keep using the cube; try calculating again.';
       solutionList.textContent=String(error?.message || error);
@@ -664,6 +704,7 @@
         solutionStages=[];
         solutionCalculated=false;
         solutionIndex=0;
+        selectedSolutionIndex=null;
         solutionExpectedState=null;
         updateSolutionUI();
         return;
@@ -726,6 +767,21 @@
   hintToggle.addEventListener('click', () => setHintPanel(!hintPanel.classList.contains('open')));
   findSolutionButton.addEventListener('click', findFullSolution);
   stepSizeSelect.addEventListener('change', updateSolutionUI);
+  function selectSolutionMoveFromEvent(event) {
+    const token = event.target.closest('[data-solution-move-index]');
+    if (!token || !solutionCalculated) return;
+    const index = Number(token.dataset.solutionMoveIndex);
+    if (!Number.isInteger(index) || index < 0 || index >= solutionMoves.length) return;
+    selectedSolutionIndex = index;
+    updateSolutionUI();
+  }
+  solutionList.addEventListener('click', selectSolutionMoveFromEvent);
+  solutionList.addEventListener('keydown', event => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    if (!event.target.closest('[data-solution-move-index]')) return;
+    event.preventDefault();
+    selectSolutionMoveFromEvent(event);
+  });
   nextMoveButton.addEventListener('click', applyNextSolutionMove);
   autoSolveButton.addEventListener('click', solveAllMoves);
   hintClose.addEventListener('click', () => setHintPanel(false));
