@@ -104,6 +104,9 @@
   .solution-list .current-move { background: #facc15; color: #27200a; border-radius: 4px; padding: 2px 4px; font-weight: 900; }
   .solver-buttons { display: flex; gap: 8px; margin-top: 12px; }
   .solver-buttons button { flex: 1; font-size: 12px; padding: 9px 6px; }
+  .solver-step-size { width: 100%; margin-top: 6px; padding: 10px; border: 1px solid #8886; border-radius: 10px; background: var(--panel, #fff); color: inherit; font: inherit; }
+  .move-explanation { margin-top: 12px; padding: 11px; border-radius: 10px; background: #8881; font-size: 12px; line-height: 1.5; }
+  .move-explanation strong { display: block; margin-bottom: 4px; }
   .features-panel { max-width: 700px; margin: 24px auto 8px; padding: 18px; border: 1px solid #8885; border-radius: 14px; }
   .features-title { font-size: 18px; font-weight: 850; margin-bottom: 5px; }
   .features-subtitle { font-size: 12px; opacity: .65; margin-bottom: 14px; }
@@ -188,9 +191,15 @@
       <div id="c-solver-status" class="solver-status" role="status">Ready when you are.</div>
       <div id="c-solution-progress" class="solver-progress">No solution loaded yet.</div>
       <div id="c-solution-list" class="solution-list">Your solution moves will appear here.</div>
+      <div class="move-explanation" id="c-move-explanation" aria-live="polite">After calculating a solution, each move will include an explanation of what it turns and why it appears in the plan.</div>
+      <label class="solver-description" for="c-step-size">How much should I do?</label>
+      <select id="c-step-size" class="solver-step-size" aria-label="Number of solver moves per step">
+        <option value="1">One move at a time</option>
+        <option value="3">Three moves at a time</option>
+      </select>
       <div class="solver-buttons">
-        <button id="c-next-move" type="button" disabled>▶ Next move</button>
-        <button id="c-auto-solve" type="button" disabled>⚡ Solve all</button>
+        <button id="c-next-move" type="button" disabled>▶ Do 1 move</button>
+        <button id="c-auto-solve" type="button" disabled>⚡ Solve whole cube</button>
       </div>
     </div>
     <p class="hint-note">The full solver uses a two-phase 3×3 solving algorithm. Its solver library loads from a public CDN, so an internet connection is required the first time you calculate a solution.</p>
@@ -312,6 +321,21 @@
   const solverStatus = app.querySelector('#c-solver-status');
   const solutionProgress = app.querySelector('#c-solution-progress');
   const solutionList = app.querySelector('#c-solution-list');
+  const moveExplanation = app.querySelector('#c-move-explanation');
+  const stepSizeSelect = app.querySelector('#c-step-size');
+
+  function explainMove(move, index, total) {
+    const face = move[0];
+    const faceNames = { U:'top (up)', D:'bottom (down)', R:'right', L:'left', F:'front', B:'back' };
+    const faceName = faceNames[face] || face;
+    const amount = move.endsWith('2') ? 'a half-turn (180°)' : move.endsWith("'") ? 'a counterclockwise quarter-turn (90°)' : 'a clockwise quarter-turn (90°)';
+    const moveMeaning = faceName + ' face makes ' + amount + '.';
+    const planReason = index===0
+      ? 'This is the first move in the calculated plan. The solver chose it based on the current positions and orientations of all the pieces.'
+      : 'This is move ' + (index+1) + ' of ' + total + '. It works together with the surrounding moves to reposition and orient pieces while bringing the whole cube toward the solved state.';
+    const caveat = ' One move may not make the cube look more solved by itself; later moves can restore pieces temporarily moved out of place.';
+    return moveMeaning + ' ' + planReason + caveat;
+  }
 
   function updateSolutionUI() {
     const loaded=solutionMoves.length>0;
@@ -320,8 +344,14 @@
       : 'No solution loaded yet.';
     nextMoveButton.disabled = !loaded || solutionIndex>=solutionMoves.length || busy;
     autoSolveButton.disabled = !loaded || solutionIndex>=solutionMoves.length || busy;
+    const stepSize = Number(stepSizeSelect.value || 1);
+    nextMoveButton.textContent = stepSize===3 ? '▶ Do 3 moves' : '▶ Do 1 move';
     solutionList.replaceChildren();
-    if(!loaded) { solutionList.textContent='Your solution moves will appear here.'; return; }
+    if(!loaded) {
+      solutionList.textContent='Your solution moves will appear here.';
+      moveExplanation.innerHTML='<strong>Move explanations</strong>Calculate a solution to see what each move turns and why it is included in the plan.';
+      return;
+    }
     solutionMoves.forEach((move,i)=>{
       if(i) solutionList.appendChild(document.createTextNode(' '));
       const token=document.createElement('span');
@@ -329,6 +359,11 @@
       if(i===solutionIndex && solutionIndex<solutionMoves.length) token.className='current-move';
       solutionList.appendChild(token);
     });
+    if(solutionIndex>=solutionMoves.length) {
+      moveExplanation.innerHTML='<strong>Why this worked</strong>The planned sequence is complete. The cube should now be solved.';
+    } else {
+      moveExplanation.innerHTML='<strong>Why this move?</strong>'+explainMove(solutionMoves[solutionIndex], solutionIndex, solutionMoves.length);
+    }
   }
 
   function getSolverWorker() {
@@ -432,20 +467,24 @@
 
   async function applyNextSolutionMove() {
     if(!solutionMoves.length || solutionIndex>=solutionMoves.length || busy) return;
-    if(signature()!==solutionExpectedState) {
-      solverStatus.textContent='The cube changed since this solution was calculated. Find a fresh solution first.';
-      solutionMoves=[];
-      solutionIndex=0;
-      solutionExpectedState=null;
+    const amount = Number(stepSizeSelect.value || 1);
+    for(let step=0; step<amount && solutionIndex<solutionMoves.length; step++) {
+      if(signature()!==solutionExpectedState) {
+        solverStatus.textContent='The cube changed since this solution was calculated. Find a fresh solution first.';
+        solutionMoves=[];
+        solutionIndex=0;
+        solutionExpectedState=null;
+        updateSolutionUI();
+        return;
+      }
+      const move=solutionMoves[solutionIndex];
+      await turnMove(move,true);
+      solutionIndex++;
+      solutionExpectedState=signature();
+      solverStatus.textContent=`Applied ${solutionIndex} of ${solutionMoves.length} moves. Last move: ${move}.`;
       updateSolutionUI();
-      return;
     }
-    const move=solutionMoves[solutionIndex];
-    await turnMove(move,true);
-    solutionIndex++;
-    solutionExpectedState=signature();
-    solverStatus.textContent=`Applied ${move}. ${solutionMoves.length-solutionIndex} move(s) remaining.`;
-    updateSolutionUI();
+    if(solutionIndex>=solutionMoves.length) solverStatus.textContent='Solution complete! 🎉';
   }
 
   async function solveAllMoves() {
