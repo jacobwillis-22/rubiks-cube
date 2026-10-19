@@ -918,6 +918,8 @@
           letter.className = 'face-letter';
           letter.textContent = d;
           letter.setAttribute('aria-hidden', 'true');
+          // Counter-rotate the label in the sticker plane so its glyph stays upright as the cube is flipped.
+          letter.style.transform = `translateZ(0.6px) rotateZ(${-vx}deg)`;
           f.appendChild(letter);
           f.tabIndex=0;
           f.setAttribute('role','button');
@@ -937,6 +939,7 @@
 
     root.replaceChildren(fragment);
     root.style.transform=`scale(${zoom}) rotateX(${vx}deg) rotateY(${vy}deg)`;
+    root.querySelectorAll('.face-letter').forEach(letter => { letter.style.transform = `translateZ(0.6px) rotateZ(${-vx}deg)`; });
     metrics();
   }
 
