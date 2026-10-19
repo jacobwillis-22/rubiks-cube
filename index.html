@@ -1141,9 +1141,14 @@
 
   stage.addEventListener('pointercancel',event=>{
     activePointers.delete(event.pointerId);
+    if(drag&&drag.id===event.pointerId&&drag.preview){
+      drag.preview.nodes.forEach(node=>root.appendChild(node));
+      drag.preview.wrapper.remove();
+      render();
+    }
     drag=null;
     pinchActive=activePointers.size>=2;
-    if (!pinchActive) pinchStartDistance=0;
+    if(!pinchActive)pinchStartDistance=0;
   });
 
   app.querySelector('#c-undo').addEventListener('click',async()=>{
