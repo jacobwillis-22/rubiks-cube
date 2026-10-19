@@ -937,7 +937,7 @@
     ];
     let best=null;
     for(let axis=0;axis<3;axis++){
-      if(axis===normalAxis || g.piecePosition[axis]===0) continue; // keep turns on outer layers for standard 3x3 solver compatibility
+      if(axis===normalAxis) continue; // Include coordinate 0 so middle rows/columns can be turned too.
       const unit=[0,0,0]; unit[axis]=1;
       // Piece coordinates use +Y upward, while CSS screen coordinates use
       // +Y downward. Convert the logical rotation velocity before projecting
