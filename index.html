@@ -953,6 +953,7 @@
   // mapping is used only to reinterpret moves when the cube is reoriented.
   function viewFaceMap() {
     const rx=vx*Math.PI/180, ry=vy*Math.PI/180;
+    // Match the actual CSS transform order: rotateY is applied before rotateX.
     const rotateToScreen=([x,y,z])=>{
       const x1=x*Math.cos(ry)+z*Math.sin(ry);
       const z1=-x*Math.sin(ry)+z*Math.cos(ry);
@@ -1117,10 +1118,10 @@
     // Resolve the visible sticker/face even when the pointer lands on a child element.
     const faceEl = event.target.closest('.face, .sticker');
     const face = faceEl && (faceEl.classList.contains('face') ? faceEl.dataset.dir : faceEl.parentElement?.dataset.dir);
-    // A right mouse drag always rotates the view. On touch, the background rotates
-    // the view and a sticker drag turns a layer. Left mouse drag turns a layer.
+    // Dragging a sticker turns that layer. Dragging the empty stage rotates the
+    // whole view with either mouse button; touch keeps the same sticker/background split.
     const mode = rotateView ? 'rotate' :
-      event.pointerType==='mouse' ? (face ? 'slice' : 'idle') :
+      event.pointerType==='mouse' ? (face ? 'slice' : 'rotate') :
       (face ? 'slice' : 'rotate');
     if(busy && face && mode==='slice') {
       activePointers.delete(event.pointerId);
