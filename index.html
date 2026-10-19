@@ -247,6 +247,11 @@
   let vy = -35;
   let zoom = 1;
   let last = 'Ready';
+  let solutionMoves = [];
+  let solutionIndex = 0;
+  let solutionExpectedState = null;
+  let solverReady = false;
+  let solverInitializing = false;
 
   const status = app.querySelector('#c-status');
   const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -278,7 +283,140 @@
   let solved;
 
 
+
+  function cubeFacelets() {
+    const at = new Map(pieces.map(p=>[p.p.join(','),p]));
+    const ordered = [];
+    // Kociemba/cubejs facelet order: U, R, F, D, L, B.
+    for (const z of [-1,0,1]) for (const x of [-1,0,1]) ordered.push([x,1,z,'U']);
+    for (const y of [1,0,-1]) for (const z of [-1,0,1]) ordered.push([1,y,z,'R']);
+    for (const y of [1,0,-1]) for (const x of [-1,0,1]) ordered.push([x,y,1,'F']);
+    for (const z of [1,0,-1]) for (const x of [-1,0,1]) ordered.push([x,-1,z,'D']);
+    for (const y of [1,0,-1]) for (const z of [1,0,-1]) ordered.push([-1,y,z,'L']);
+    for (const y of [1,0,-1]) for (const x of [1,0,-1]) ordered.push([x,y,-1,'B']);
+    const colorToFace = Object.fromEntries(Object.entries(colors).map(([face,color])=>[color,face]));
+    return ordered.map(([x,y,z,face])=>{
+      const piece=at.get([x,y,z].join(','));
+      return colorToFace[piece?.s[face]] || '?';
+    }).join('');
+  }
+
   const hintToggle = app.querySelector('#c-hint-toggle');
+  const hintPanel = app.querySelector('#c-hint-panel');
+  const hintClose = app.querySelector('#c-hint-close');
+  const findSolutionButton = app.querySelector('#c-find-solution');
+  const nextMoveButton = app.querySelector('#c-next-move');
+  const autoSolveButton = app.querySelector('#c-auto-solve');
+  const solverStatus = app.querySelector('#c-solver-status');
+  const solutionProgress = app.querySelector('#c-solution-progress');
+  const solutionList = app.querySelector('#c-solution-list');
+
+  function updateSolutionUI() {
+    const loaded=solutionMoves.length>0;
+    solutionProgress.textContent = loaded
+      ? (solutionIndex>=solutionMoves.length ? 'Solution complete! 🎉' : `Move ${solutionIndex+1} of ${solutionMoves.length}`)
+      : 'No solution loaded yet.';
+    nextMoveButton.disabled = !loaded || solutionIndex>=solutionMoves.length || busy;
+    autoSolveButton.disabled = !loaded || solutionIndex>=solutionMoves.length || busy;
+    solutionList.replaceChildren();
+    if(!loaded) { solutionList.textContent='Your solution moves will appear here.'; return; }
+    solutionMoves.forEach((move,i)=>{
+      if(i) solutionList.appendChild(document.createTextNode(' '));
+      const token=document.createElement('span');
+      token.textContent=move;
+      if(i===solutionIndex && solutionIndex<solutionMoves.length) token.className='current-move';
+      solutionList.appendChild(token);
+    });
+  }
+
+  async function findFullSolution() {
+    if (busy || solverInitializing) return;
+    if (typeof window.Cube === 'undefined') {
+      solverStatus.textContent='Could not load the solver library. Check your internet connection and refresh the page.';
+      return;
+    }
+    solverInitializing=true;
+    findSolutionButton.disabled=true;
+    solverStatus.textContent=solverReady ? 'Calculating a solution…' : 'Preparing the solver for its first run…';
+    await new Promise(resolve=>setTimeout(resolve,80));
+    try {
+      if(!solverReady) {
+        window.Cube.initSolver();
+        solverReady=true;
+      }
+      const facelets=cubeFacelets();
+      if(facelets.length!==54 || facelets.includes('?')) throw new Error('Could not read all 54 cube stickers.');
+      const cube=window.Cube.fromString(facelets);
+      const algorithm=cube.solve();
+      solutionMoves=algorithm.trim() ? algorithm.trim().split(/\s+/) : [];
+      solutionIndex=0;
+      solutionExpectedState=signature();
+      if(!solutionMoves.length) {
+        solverStatus.textContent='This cube is already solved. 🎉';
+      } else {
+        solverStatus.textContent='Solution ready. Follow the highlighted move or solve the whole cube.';
+      }
+      updateSolutionUI();
+    } catch(error) {
+      solutionMoves=[];
+      solutionIndex=0;
+      solutionExpectedState=null;
+      solverStatus.textContent='I could not solve this cube state. Try Reset or scramble the cube using the app, then calculate again.';
+      solutionList.textContent=String(error?.message || error);
+      updateSolutionUI();
+    } finally {
+      solverInitializing=false;
+      findSolutionButton.disabled=false;
+    }
+  }
+
+  async function applyNextSolutionMove() {
+    if(!solutionMoves.length || solutionIndex>=solutionMoves.length || busy) return;
+    if(signature()!==solutionExpectedState) {
+      solverStatus.textContent='The cube changed since this solution was calculated. Find a fresh solution first.';
+      solutionMoves=[];
+      solutionIndex=0;
+      solutionExpectedState=null;
+      updateSolutionUI();
+      return;
+    }
+    const move=solutionMoves[solutionIndex];
+    await turnMove(move,true);
+    solutionIndex++;
+    solutionExpectedState=signature();
+    solverStatus.textContent=`Applied ${move}. ${solutionMoves.length-solutionIndex} move(s) remaining.`;
+    updateSolutionUI();
+  }
+
+  async function solveAllMoves() {
+    if(!solutionMoves.length || busy) return;
+    if(signature()!==solutionExpectedState) {
+      solverStatus.textContent='The cube changed since this solution was calculated. Find a fresh solution first.';
+      solutionMoves=[];
+      solutionIndex=0;
+      solutionExpectedState=null;
+      updateSolutionUI();
+      return;
+    }
+    autoSolveButton.disabled=true;
+    nextMoveButton.disabled=true;
+    while(solutionIndex<solutionMoves.length) {
+      if(signature()!==solutionExpectedState) {
+        solverStatus.textContent='Cube state changed. Calculate a new solution.';
+        break;
+      }
+      const move=solutionMoves[solutionIndex];
+      await turnMove(move,true);
+      solutionIndex++;
+      solutionExpectedState=signature();
+      solverStatus.textContent=`Solving… ${solutionIndex} of ${solutionMoves.length} moves.`;
+      updateSolutionUI();
+    }
+    if(solutionIndex===solutionMoves.length) solverStatus.textContent='Cube solved! 🎉';
+    updateSolutionUI();
+  }
+
+
   const hintPanel = app.querySelector('#c-hint-panel');
   const hintClose = app.querySelector('#c-hint-close');
 
@@ -290,6 +428,9 @@
     hintToggle.textContent = open ? '✕' : '💡';
   }
   hintToggle.addEventListener('click', () => setHintPanel(!hintPanel.classList.contains('open')));
+  findSolutionButton.addEventListener('click', findFullSolution);
+  nextMoveButton.addEventListener('click', applyNextSolutionMove);
+  autoSolveButton.addEventListener('click', solveAllMoves);
   hintClose.addEventListener('click', () => setHintPanel(false));
   document.addEventListener('keydown', e => { if(e.key==='Escape') setHintPanel(false); });
 
@@ -328,6 +469,7 @@
 
   function metrics() {
     updateHint();
+    updateSolutionUI();
     app.querySelector('#c-count').textContent = count;
     app.querySelector('#c-state').textContent =
       signature()===solved ? 'Solved' : 'In progress';
@@ -404,25 +546,28 @@
     const generalized = move.match(/^([XYZ])(-1|0|1)(\'?)/);
     if (generalized) {
       return {axis:{X:0,Y:1,Z:2}[generalized[1]], layer:Number(generalized[2]),
-        sign:generalized[3] ? -1 : 1};
+        sign:generalized[3] ? -1 : 1, turns:1};
     }
     const face=move[0], axis=AX[face], layer=LA[face];
-    return {axis, layer, sign:(layer===1 ? -1 : 1) * (move.endsWith("'") ? -1 : 1)};
+    return {axis, layer, sign:(layer===1 ? -1 : 1) * (move.endsWith("'") ? -1 : 1),
+      turns:move.endsWith('2') ? 2 : 1};
   }
 
   function apply(move) {
-    const {axis,layer,sign}=moveInfo(move);
+    const {axis,layer,sign,turns}=moveInfo(move);
     for (const p of pieces) {
       if (p.p[axis]===layer) {
-        p.p=rotateVector(p.p,axis,sign);
-        const next={};
-        for (const [d,c] of Object.entries(p.s)) next[rotatedDirection(d,axis,sign)]=c;
-        p.s=next;
+        for(let i=0;i<turns;i++) {
+          p.p=rotateVector(p.p,axis,sign);
+          const next={};
+          for (const [d,c] of Object.entries(p.s)) next[rotatedDirection(d,axis,sign)]=c;
+          p.s=next;
+        }
       }
     }
   }
 
-  const inverse = move => move.endsWith("'") ? move.slice(0,-1) : move+"'";
+  const inverse = move => move.endsWith('2') ? move : move.endsWith("'") ? move.slice(0,-1) : move+"'";
 
   function lock(value) {
     busy=value;
@@ -431,7 +576,7 @@
   }
 
   async function animate(move) {
-    const {axis,layer,sign}=moveInfo(move);
+    const {axis,layer,sign,turns}=moveInfo(move);
     const selected=pieces.filter(p=>p.p[axis]===layer);
     const nodes=selected.map(p=>root.querySelector(`[data-id="${p.id}"]`));
     if(nodes.length!==9||nodes.some(n=>!n)) throw Error('Could not find slice cubies');
@@ -450,7 +595,7 @@
       const onEnd=e=>{if(e.target===wrapper&&e.propertyName==='transform')done();};
       wrapper.addEventListener('transitionend',onEnd);
       requestAnimationFrame(()=>{
-        wrapper.style.transform=`rotate${axisName}(${90*visualSign}deg)`;
+        wrapper.style.transform=`rotate${axisName}(${90*visualSign*turns}deg)`;
         setTimeout(done,310);
       });
     });
