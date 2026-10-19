@@ -958,16 +958,28 @@
       const z1=-x*Math.sin(ry)+z*Math.cos(ry);
       return [x1, y*Math.cos(rx)-z1*Math.sin(rx), y*Math.sin(rx)+z1*Math.cos(rx)];
     };
-    const screenAxes={R:[1,0,0],L:[-1,0,0],U:[0,1,0],D:[0,-1,0],F:[0,0,1],B:[0,0,-1]};
+    const axes=[
+      {positive:'R',negative:'L',v:[1,0,0]},
+      {positive:'U',negative:'D',v:[0,1,0]},
+      {positive:'F',negative:'B',v:[0,0,1]}
+    ];
+    const fixedVectors=Object.fromEntries(dirs.map(d=>[d,rotateToScreen(V[d])]));
+    const permutations=[[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]];
+    let assignment=permutations[0], bestScore=-Infinity;
+    for(const p of permutations){
+      const score=['R','U','F'].reduce((sum,d,i)=>{
+        const v=fixedVectors[d], axis=axes[p[i]].v;
+        return sum+Math.abs(v.reduce((n,x,j)=>n+x*axis[j],0));
+      },0);
+      if(score>bestScore){bestScore=score;assignment=p;}
+    }
     const fixedToScreen={};
     for(const d of dirs){
-      const v=rotateToScreen(V[d]);
-      let best='F', score=-Infinity;
-      for(const [screen,axis] of Object.entries(screenAxes)){
-        const dot=v.reduce((sum,n,i)=>sum+n*axis[i],0);
-        if(dot>score){score=dot;best=screen;}
-      }
-      fixedToScreen[d]=best;
+      const source=d==='R'||d==='L'?'R':d==='U'||d==='D'?'U':'F';
+      const v=fixedVectors[source], axis=axes[assignment[dirs.indexOf(source)===0?0:dirs.indexOf(source)===2?2:1]];
+      const dot=v.reduce((sum,n,i)=>sum+n*axis.v[i],0);
+      const positive=dot>=0;
+      fixedToScreen[d]=(d==='R'||d==='L')?(positive?axis.positive:axis.negative):(d==='U'||d==='D')?(positive?axis.positive:axis.negative):(positive?axis.positive:axis.negative);
     }
     return fixedToScreen;
   }
