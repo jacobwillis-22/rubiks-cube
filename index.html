@@ -255,6 +255,13 @@
         <option value="1">One move at a time</option>
         <option value="3">Three moves at a time</option>
       </select>
+      <label class="solver-description" for="c-solve-speed">Solve whole cube speed</label>
+      <select id="c-solve-speed" class="solver-step-size" aria-label="Automatic solving speed">
+        <option value="0.5">0.5× — Slow</option>
+        <option value="1" selected>1× — Normal</option>
+        <option value="2">2× — Fast</option>
+        <option value="2.5">2.5× — Very fast</option>
+      </select>
       <div class="solver-buttons">
         <button id="c-next-move" type="button" disabled>▶ Do 1 move</button>
         <button id="c-auto-solve" type="button" disabled>⚡ Solve whole cube</button>
@@ -385,6 +392,9 @@
   const solutionList = app.querySelector('#c-solution-list');
   const moveExplanation = app.querySelector('#c-move-explanation');
   const stepSizeSelect = app.querySelector('#c-step-size');
+  const solveSpeedSelect = app.querySelector('#c-solve-speed');
+  let solveSpeed = Number(solveSpeedSelect.value) || 1;
+  let autoSolving = false;
 
   function explainMove(move, index, total) {
     const faceNames = { U:'top', D:'bottom', R:'right', L:'left', F:'front', B:'back' };
@@ -731,22 +741,29 @@
       updateSolutionUI();
       return;
     }
+    autoSolving = true;
     autoSolveButton.disabled=true;
     nextMoveButton.disabled=true;
-    while(solutionIndex<solutionMoves.length) {
-      if(signature()!==solutionExpectedState) {
-        solverStatus.textContent='Cube state changed. Calculate a new solution.';
-        break;
+    solveSpeedSelect.disabled=true;
+    try {
+      while(solutionIndex<solutionMoves.length) {
+        if(signature()!==solutionExpectedState) {
+          solverStatus.textContent='Cube state changed. Calculate a new solution.';
+          break;
+        }
+        const move=solutionMoves[solutionIndex];
+        await turnMove(move,true);
+        solutionIndex++;
+        solutionExpectedState=signature();
+        solverStatus.textContent=`Solving… ${solutionIndex} of ${solutionMoves.length} moves. Speed: ${solveSpeed}×.`;
+        updateSolutionUI();
       }
-      const move=solutionMoves[solutionIndex];
-      await turnMove(move,true);
-      solutionIndex++;
-      solutionExpectedState=signature();
-      solverStatus.textContent=`Solving… ${solutionIndex} of ${solutionMoves.length} moves.`;
+      if(solutionIndex===solutionMoves.length) solverStatus.textContent='Cube solved! 🎉';
       updateSolutionUI();
+    } finally {
+      autoSolving = false;
+      solveSpeedSelect.disabled=false;
     }
-    if(solutionIndex===solutionMoves.length) solverStatus.textContent='Cube solved! 🎉';
-    updateSolutionUI();
   }
 
 
@@ -781,6 +798,9 @@
     if (!event.target.closest('[data-solution-move-index]')) return;
     event.preventDefault();
     selectSolutionMoveFromEvent(event);
+  });
+  solveSpeedSelect.addEventListener('change', () => {
+    solveSpeed = Number(solveSpeedSelect.value) || 1;
   });
   nextMoveButton.addEventListener('click', applyNextSolutionMove);
   autoSolveButton.addEventListener('click', solveAllMoves);
@@ -940,7 +960,8 @@
     const visualSign=axis===1?sign:-sign;
     const axisName=['X','Y','Z'][axis];
     wrapper.style.willChange='transform';
-    wrapper.style.transition='transform 240ms cubic-bezier(.22,.75,.25,1)';
+    const animationSpeed = autoSolving ? solveSpeed : 1;
+    wrapper.style.transition='transform ' + Math.round(240 / animationSpeed) + 'ms cubic-bezier(.22,.75,.25,1)';
     void wrapper.offsetWidth;
     await new Promise(resolve=>{
       let finished=false;
@@ -949,7 +970,7 @@
       wrapper.addEventListener('transitionend',onEnd);
       requestAnimationFrame(()=>{
         wrapper.style.transform=`rotate${axisName}(${90*visualSign*turns}deg)`;
-        setTimeout(done,310);
+        setTimeout(done,Math.round(310 / animationSpeed));
       });
     });
     apply(move);
