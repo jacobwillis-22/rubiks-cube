@@ -65,6 +65,16 @@
     .face[data-dir="U"] { transform: rotateX(90deg) translateZ(21px); }
     .face[data-dir="D"] { transform: rotateX(-90deg) translateZ(21px); }
   }
+  .update-panel {
+    margin: 0 0 12px; padding: 10px 12px; border: 1px solid #60a5fa66;
+    border-radius: 10px; background: color-mix(in srgb, #2563eb 9%, Canvas);
+    font-size: 13px; line-height: 1.4;
+  }
+  .update-panel strong { display: block; margin-bottom: 3px; }
+  #cube-app.fullscreen-mode .update-panel, #cube-app:fullscreen .update-panel { display: none; }
+  /* The cube needs to receive vertical as well as horizontal touch drags.
+     Scroll the page by swiping outside the cube stage. */
+  .stage { touch-action: none; }
   @media (prefers-reduced-motion: reduce) { .guide-panel, .guide-backdrop { transition:none; } }
 </style>
 </head>
@@ -82,6 +92,11 @@
         <div class="count" id="c-count">0</div>
       </div>
     </div>
+  </div>
+
+  <div class="update-panel" aria-label="Latest update">
+    <strong>🛠️ Latest update</strong>
+    Touchscreen controls now support dragging the cube up, down, left, and right. Mouse controls and zoom are still supported.
   </div>
 
   <div class="stage" id="c-stage">
@@ -345,12 +360,10 @@
     drag={x:event.clientX,y:event.clientY,startX:event.clientX,startY:event.clientY,
       id:event.pointerId,face:face || null,pieceId:piece ? piece.id : null,
       piecePosition:piece ? [...piece.p] : null,moved:false};
-    // Let mobile browsers handle vertical touch gestures as page scrolling.
-    // Mouse interactions still capture the pointer for reliable cube dragging.
-    if (event.pointerType !== 'touch') {
-      stage.setPointerCapture(event.pointerId);
-      event.preventDefault();
-    }
+    // Capture touch and mouse drags so vertical gestures rotate the cube too.
+    // To scroll the page on a touchscreen, start the swipe outside the cube stage.
+    stage.setPointerCapture(event.pointerId);
+    event.preventDefault();
   });
 
   stage.addEventListener('pointermove',event=>{
