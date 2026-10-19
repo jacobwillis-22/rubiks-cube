@@ -338,23 +338,81 @@
   const stepSizeSelect = app.querySelector('#c-step-size');
 
   function explainMove(move, index, total) {
-    const face = move[0];
     const faceNames = { U:'top', D:'bottom', R:'right', L:'left', F:'front', B:'back' };
+    const colorNames = {
+      [colors.U]:'white', [colors.D]:'yellow', [colors.F]:'red',
+      [colors.B]:'orange', [colors.R]:'blue', [colors.L]:'green'
+    };
+    const positionName = p => {
+      const parts = [];
+      if (p.p[1] === 1) parts.push('top');
+      if (p.p[1] === -1) parts.push('bottom');
+      if (p.p[2] === 1) parts.push('front');
+      if (p.p[2] === -1) parts.push('back');
+      if (p.p[0] === 1) parts.push('right');
+      if (p.p[0] === -1) parts.push('left');
+      return parts.join('-') || 'middle';
+    };
+    const pieceName = p => Object.values(p.s).filter(Boolean).map(c => colorNames[c] || 'unknown').join('-') +
+      (Object.keys(p.s).length === 1 ? ' center' : Object.keys(p.s).length === 2 ? ' edge' : ' corner');
+    const isSolvedPiece = p => Object.entries(p.s).every(([d,c]) => colors[d] === c) &&
+      Object.keys(p.s).every(d => {
+        const v = V[d];
+        return p.p.every((n,i) => v[i] === 0 || n === v[i]);
+      });
+    const simulate = (source, token) => {
+      const copy = source.map(p => ({ id:p.id, p:[...p.p], s:{...p.s} }));
+      const info = moveInfo(token);
+      for (const p of copy) if (p.p[info.axis] === info.layer) {
+        for (let i=0;i<info.turns;i++) {
+          p.p = rotateVector(p.p, info.axis, info.sign);
+          const nextStickers = {};
+          for (const [d,col] of Object.entries(p.s)) nextStickers[rotatedDirection(d,info.axis,info.sign)] = col;
+          p.s = nextStickers;
+        }
+      }
+      return copy;
+    };
+    const face = move[0];
     const faceName = faceNames[face] || face;
-    const turn = move.endsWith('2')
-      ? 'turn it halfway around (180°)'
-      : move.endsWith("'")
-        ? 'turn it counterclockwise (90°)'
-        : 'turn it clockwise (90°)';
-    const faceMeaning = 'Turn the ' + faceName + ' layer: ' + turn + '.';
-    const moveMeaning = move.endsWith('2')
-      ? 'That moves the pieces around that face by half a turn.'
-      : 'That moves the edge and corner pieces around that face.';
-    const why = index === 0
-      ? 'Why now? This is the first part of the solver’s plan. It moves pieces into a setup that later turns can use to finish solving the cube.'
-      : 'Why now? The solver puts this turn here because it works with the turns before and after it. Together, they move pieces toward their correct places.';
-    const reminder = ' This one turn might not make the cube look more solved. That’s okay—some pieces may move out of place briefly so the next turns can put them where they belong.';
-    return faceMeaning + ' ' + moveMeaning + ' ' + why + reminder;
+    const turn = move.endsWith('2') ? 'halfway around (180°)' :
+      move.endsWith("'") ? 'counterclockwise (90°)' : 'clockwise (90°)';
+    const after = simulate(pieces, move);
+    const afterById = new Map(after.map(p => [p.id,p]));
+    const info = moveInfo(move);
+    const affected = pieces.filter(p => p.p[info.axis] === info.layer);
+    const examples = affected.map(before => ({ before, after:afterById.get(before.id) }));
+    const next = solutionMoves[index+1];
+    let why = '';
+    let chosen = null;
+    if (examples.length) {
+      const nextInfo = next ? moveInfo(next) : null;
+      chosen = examples.find(pair => isSolvedPiece(pair.after) !== isSolvedPiece(pair.before)) ||
+        examples.find(pair => nextInfo && pair.after.p[nextInfo.axis] === nextInfo.layer) ||
+        examples.find(pair => !isSolvedPiece(pair.after)) || examples[0];
+      const wasSolved = isSolvedPiece(chosen.before);
+      const nowSolved = isSolvedPiece(chosen.after);
+      why = 'This moves the ' + pieceName(chosen.before) + ' piece from the ' + positionName(chosen.before) +
+        ' to the ' + positionName(chosen.after) + '. ' +
+        (nowSolved ? 'That piece is now in its solved position and orientation.' :
+          wasSolved ? 'It temporarily leaves its solved position; later turns must bring it back.' :
+          'It is not solved yet, so the remaining turns still need to place and orient it correctly.');
+      if (next) {
+        const nextState = simulate(after, next);
+        const nextPiece = nextState.find(p=>p.id===chosen.before.id);
+        if (nextPiece && positionName(nextPiece) !== positionName(chosen.after)) {
+          why += ' The next turn (' + next + ') moves that same piece from the ' +
+            positionName(chosen.after) + ' to the ' + positionName(nextPiece) + '.';
+        }
+      }
+    } else {
+      why = 'This changes the positions and directions of pieces in the ' + faceName +
+        ' layer. The explanation is based on the cube’s current state.';
+    }
+    const makesProgress = examples.some(pair => isSolvedPiece(pair.after) && !isSolvedPiece(pair.before));
+    const reminder = makesProgress ? '' :
+      ' One turn may not make the whole cube look more solved; the important part is where the pieces end up after the full sequence.';
+    return 'Turn the ' + faceName + ' layer ' + turn + '. ' + why + reminder;
   }
 
   function updateSolutionUI() {
