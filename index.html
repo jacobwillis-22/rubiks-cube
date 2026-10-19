@@ -952,7 +952,7 @@
     const inverseFace = { F:'', B:'rotateY(-180deg)', R:'rotateY(-90deg)', L:'rotateY(90deg)', U:'rotateX(-90deg)', D:'rotateX(90deg)' };
     root.querySelectorAll('.face-letter').forEach(letter => {
       const dir = letter.parentElement.dataset.dir || 'F';
-      letter.style.transform = `rotateX(${-vx}deg) rotateY(${-vy}deg) ${inverseFace[dir]} translateZ(0.6px)`;
+      letter.style.transform = `${inverseFace[dir]} rotateY(${-vy}deg) rotateX(${-vx}deg) translateZ(0.6px)`;
     });
   }
 
