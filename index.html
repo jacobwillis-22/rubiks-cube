@@ -368,7 +368,7 @@
     const horizontalSign=Math.cos(vx*Math.PI/180)<0?-1:1;
     vy+=dx*0.65*horizontalSign;
     vx-=dy*0.65;
-    root.style.transform=`rotateX(${vx}deg) rotateY(${vy}deg)`;
+    root.style.transform=`scale(${zoom}) rotateX(${vx}deg) rotateY(${vy}deg)`;
   });
 
   stage.addEventListener('pointerup',async event=>{
