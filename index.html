@@ -818,7 +818,7 @@
   app.querySelectorAll('[data-move]').forEach(button => {
     button.addEventListener('click', () => {
       if (busy) return;
-      turnMove(button.dataset.move);
+      turnMove(screenMoveToFixed(button.dataset.move));
     });
   });
   hintToggle.addEventListener('click', () => setHintPanel(!hintPanel.classList.contains('open')));
@@ -949,15 +949,51 @@
     metrics();
   }
 
+  // Convert between the cube's fixed coordinates and the directions currently
+  // facing the viewer. CSS applies rotateY(vy) then rotateX(vx).
+  function viewFaceMap() {
+    const rx=vx*Math.PI/180, ry=vy*Math.PI/180;
+    const rotateToScreen = ([x,y,z]) => {
+      const x1=x*Math.cos(ry)+z*Math.sin(ry);
+      const z1=-x*Math.sin(ry)+z*Math.cos(ry);
+      return [x1, y*Math.cos(rx)-z1*Math.sin(rx), y*Math.sin(rx)+z1*Math.cos(rx)];
+    };
+    const screenAxes={R:[1,0,0],L:[-1,0,0],U:[0,1,0],D:[0,-1,0],F:[0,0,1],B:[0,0,-1]};
+    const fixedToScreen={};
+    for(const d of dirs){
+      const v=rotateToScreen(V[d]);
+      let best='F', score=-Infinity;
+      for(const [screen,axis] of Object.entries(screenAxes)){
+        const dot=v.reduce((sum,n,i)=>sum+n*axis[i],0);
+        if(dot>score){score=dot;best=screen;}
+      }
+      fixedToScreen[d]=best;
+    }
+    return fixedToScreen;
+  }
+
+  function screenMoveToFixed(move) {
+    const map=viewFaceMap();
+    const inverseMap=Object.fromEntries(Object.entries(map).map(([fixed,screen])=>[screen,fixed]));
+    const fixed=inverseMap[move[0]];
+    return fixed ? fixed+move.slice(1) : move;
+  }
+
   function updateFaceLetterTransforms() {
-    // Refresh each center label and its accessible action whenever the view rotates.
-    // Face letters identify the cube's fixed move faces, not screen-relative sides.
     const inverseFace = { F:'', B:'rotateY(-180deg)', R:'rotateY(-90deg)', L:'rotateY(90deg)', U:'rotateX(-90deg)', D:'rotateX(90deg)' };
+    const map=viewFaceMap();
     root.querySelectorAll('.face-letter').forEach(letter => {
       const dir = letter.parentElement.dataset.dir || 'F';
-      letter.textContent = dir;
+      const screenDir=map[dir] || dir;
+      letter.textContent = screenDir;
       letter.style.transform = `${inverseFace[dir]} rotateY(${-vy}deg) rotateX(${-vx}deg) translateZ(0.6px)`;
-      letter.parentElement.setAttribute('aria-label', 'Turn ' + dir + ' face');
+      letter.parentElement.setAttribute('aria-label', 'Turn screen-facing ' + screenDir + ' face');
+      letter.parentElement.dataset.screenDir=screenDir;
+    });
+    app.querySelectorAll('[data-move]').forEach(button => {
+      const move=button.dataset.move;
+      const mapped=screenMoveToFixed(move);
+      button.title='Turn screen-facing '+move[0]+' face ('+mapped+')';
     });
   }
 
