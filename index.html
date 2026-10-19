@@ -43,6 +43,7 @@
   .face-letter { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font:900 18px/1 Arial,sans-serif; color:#111; text-shadow:0 1px 1px #ffffff90; pointer-events:none; user-select:none; transform:translateZ(0.6px); transform-style:preserve-3d; backface-visibility:hidden; }
   #cube-app.hide-face-letters .face-letter { display:none; }
   .face-letter-control { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:9px 0; font-size:13px; }
+  .face-letter-control[hidden] { display:none !important; }
   .face-letter-control label { display:flex; align-items:center; gap:8px; cursor:pointer; }
   .face-letter-control input { width:17px; height:17px; accent-color:#2563eb; }
   button {
@@ -197,7 +198,7 @@
   </div>
 
   <div class="face-letter-control"><label for="c-face-letters"><input id="c-face-letters" type="checkbox" checked> Show letters</label></div>
-  <div class="face-letter-control" id="c-letter-mode-row"><span>Letter behavior</span><label for="c-letter-mode"><input id="c-letter-mode" type="checkbox"> Stay in place</label></div>
+  <div class="face-letter-control" id="c-letter-mode-row"><label for="c-letter-mode"><input id="c-letter-mode" type="checkbox"> Stay in place</label></div>
   <div class="stage" id="c-stage">
     <div class="scene"><div class="root" id="c-root"></div></div>
     <button id="c-hint-toggle" class="hint-toggle" type="button" aria-label="Open solving hints" aria-expanded="false" title="Solving hints"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M10 21h4M8.5 14.5a6 6 0 1 1 7 0c-.8.6-1.2 1.3-1.4 2h-4.2c-.2-.7-.6-1.4-1.4-2Z"/><path d="M12 2v1.5M4.9 4.9 6 6M19.1 4.9 18 6"/></svg></button>
@@ -826,7 +827,7 @@
   app.querySelectorAll('[data-move]').forEach(button => {
     button.addEventListener('click', () => {
       if (busy) return;
-      turnMove(faceLetterMode.value==='follow' ? button.dataset.move : screenMoveToFixed(button.dataset.move));
+      turnMove(!faceLetterMode.checked ? button.dataset.move : screenMoveToFixed(button.dataset.move));
     });
   });
   hintToggle.addEventListener('click', () => setHintPanel(!hintPanel.classList.contains('open')));
@@ -1000,7 +1001,7 @@
   function updateFaceLetterTransforms() {
     const inverseFace={F:'',B:'rotateY(-180deg)',R:'rotateY(-90deg)',L:'rotateY(90deg)',U:'rotateX(-90deg)',D:'rotateX(90deg)'};
     const map=viewFaceMap();
-    const follow=faceLetterMode.value==='follow';
+    const follow=!faceLetterMode.checked;
     root.querySelectorAll('.face-letter').forEach(letter=>{
       const dir=letter.parentElement.dataset.dir||'F';
       const screenDir=map[dir]||dir;
