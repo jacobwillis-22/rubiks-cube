@@ -1002,34 +1002,16 @@
   }
 
   async function animate(move) {
-    const {axis,layer,sign,turns}=moveInfo(move);
-    const selected=pieces.filter(p=>p.p[axis]===layer);
-    const nodes=selected.map(p=>root.querySelector(`[data-id="${p.id}"]`));
-    if(nodes.length!==9||nodes.some(n=>!n)) throw Error('Could not find slice cubies');
+    const {axis,layer,sign,turns}=moveInfo(move), selected=pieces.filter(p=>p.p[axis]===layer);
+    const nodes=selected.map(p=>root.querySelector('[data-id="'+p.id+'"]'));
+    if(nodes.length!==9||nodes.some(n=>!n))throw Error('Could not find slice cubies');
     const wrapper=document.createElement('div');
-    wrapper.style.cssText='position:absolute;left:0;top:0;width:0;height:0;transform-style:preserve-3d;pointer-events:none';
-    root.appendChild(wrapper);
-    nodes.forEach(node=>wrapper.appendChild(node));
-    const visualSign=axis===1?sign:-sign;
-    const axisName=['X','Y','Z'][axis];
-    wrapper.style.willChange='transform';
-    const animationSpeed = autoSolving ? solveSpeed : 1;
-    wrapper.style.transition='transform ' + Math.round(240 / animationSpeed) + 'ms cubic-bezier(.22,.75,.25,1)';
-    void wrapper.offsetWidth;
-    await new Promise(resolve=>{
-      let finished=false;
-      const done=()=>{if(finished)return;finished=true;wrapper.removeEventListener('transitionend',onEnd);resolve();};
-      const onEnd=e=>{if(e.target===wrapper&&e.propertyName==='transform')done();};
-      wrapper.addEventListener('transitionend',onEnd);
-      requestAnimationFrame(()=>{
-        wrapper.style.transform=`rotate${axisName}(${90*visualSign*turns}deg)`;
-        setTimeout(done,Math.round(310 / animationSpeed));
-      });
-    });
-    apply(move);
-    nodes.forEach(node=>root.appendChild(node));
-    wrapper.remove();
-    render();
+    wrapper.style.cssText='position:absolute;left:0;top:0;width:0;height:0;transform-style:preserve-3d;pointer-events:none;will-change:transform';
+    root.appendChild(wrapper);nodes.forEach(n=>wrapper.appendChild(n));
+    const axisName=['X','Y','Z'][axis],visualSign=axis===1?sign:-sign,speed=autoSolving?solveSpeed:1;
+    wrapper.style.transition='transform '+Math.round(240/speed)+'ms cubic-bezier(.22,.75,.25,1)';
+    void wrapper.offsetWidth;requestAnimationFrame(()=>{wrapper.style.transform='rotate'+axisName+'('+(90*visualSign*turns)+'deg)';});
+    await wait(Math.round(260/speed));apply(move);nodes.forEach(n=>root.appendChild(n));wrapper.remove();render();
   }
 
   async function turnMove(move,record=true) {
@@ -1105,118 +1087,58 @@
   });
 
   stage.addEventListener('pointermove',event=>{
-    if (activePointers.has(event.pointerId)) activePointers.set(event.pointerId, {x:event.clientX, y:event.clientY});
-    if (pinchActive && activePointers.size >= 2) {
-      const pts = [...activePointers.values()];
-      const distance = Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
-      if (pinchStartDistance > 0) {
-        zoom = Math.max(0.6, Math.min(2.5, pinchStartZoom * distance / pinchStartDistance));
-        root.style.transform = `scale(${zoom}) rotateX(${vx}deg) rotateY(${vy}deg)`;
-        updateFaceLetterTransforms();
-      }
-      event.preventDefault();
-      return;
+    if(activePointers.has(event.pointerId))activePointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
+    if(pinchActive&&activePointers.size>=2){
+      const pts=[...activePointers.values()],distance=Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y);
+      if(pinchStartDistance>0){zoom=Math.max(.6,Math.min(2.5,pinchStartZoom*distance/pinchStartDistance));root.style.transform='scale('+zoom+') rotateX('+vx+'deg) rotateY('+vy+'deg)';updateFaceLetterTransforms();}
+      event.preventDefault();return;
     }
     if(!drag||drag.id!==event.pointerId)return;
-    const dx=event.clientX-drag.x;
-    const dy=event.clientY-drag.y;
-    const totalX=event.clientX-drag.startX;
-    const totalY=event.clientY-drag.startY;
-    if(Math.hypot(totalX,totalY)>8) drag.moved=true;
-
-    if(drag.mode!=='rotate') {
-      // Sticker drags turn a slice on release; idle left-clicks on empty space do nothing.
-      drag.x=event.clientX; drag.y=event.clientY;
-      return;
+    const dx=event.clientX-drag.x,dy=event.clientY-drag.y,tx=event.clientX-drag.startX,ty=event.clientY-drag.startY;
+    if(Math.hypot(tx,ty)>8)drag.moved=true;
+    if(drag.mode==='slice'&&drag.face&&!busy){
+      if(!drag.preview&&drag.piecePosition&&drag.pieceId!=null&&Math.hypot(tx,ty)>8){
+        const swipe=[tx,-ty],len=Math.hypot(...swipe),normal=({R:0,L:0,U:1,D:1,F:2,B:2})[drag.face];
+        const cx=Math.cos(vx*Math.PI/180),sx=Math.sin(vx*Math.PI/180),cy=Math.cos(vy*Math.PI/180),sy=Math.sin(vy*Math.PI/180);
+        const project=v=>{const x=cy*v[0]+sy*v[2],y=v[1],z=-sy*v[0]+cy*v[2];return [x,-(cx*y-sx*z)];};
+        const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+        let best=null;
+        for(let axis=0;axis<3;axis++){if(axis===normal)continue;const unit=[0,0,0];unit[axis]=1;const lv=cross(unit,drag.piecePosition),v=project([lv[0],-lv[1],lv[2]]),vl=Math.hypot(...v);if(vl<.001)continue;const score=(v[0]*swipe[0]+v[1]*swipe[1])/(vl*len);if(!best||Math.abs(score)>Math.abs(best.score))best={axis,score,v};}
+        if(best){const layer=drag.piecePosition[best.axis],nodes=pieces.filter(p=>p.p[best.axis]===layer).map(p=>root.querySelector('[data-id="'+p.id+'"]'));
+          if(nodes.length===9&&nodes.every(Boolean)){const wrapper=document.createElement('div');wrapper.style.cssText='position:absolute;left:0;top:0;width:0;height:0;transform-style:preserve-3d;pointer-events:none;will-change:transform';root.appendChild(wrapper);nodes.forEach(n=>wrapper.appendChild(n));drag.preview={axis:best.axis,layer,nodes,wrapper,velocity:best.v,angle:0};}
+        }
+      }
+      if(drag.preview){const p=drag.preview,v=p.velocity,vl=Math.hypot(...v)||1,unit=innerWidth<430?45:52,angle=Math.max(-115,Math.min(115,((tx*v[0]-ty*v[1])/vl)/(unit*zoom)*57.2958));p.angle=angle;p.wrapper.style.transition='none';p.wrapper.style.transform='rotate'+['X','Y','Z'][p.axis]+'('+(angle*(p.axis===1?1:-1))+'deg)';}
+      drag.x=event.clientX;drag.y=event.clientY;event.preventDefault();return;
     }
-
-    drag.x=event.clientX;
-    drag.y=event.clientY;
-    const horizontalSign=Math.cos(vx*Math.PI/180)<0?-1:1;
-    vy+=dx*0.65*horizontalSign;
-    vx-=dy*0.65;
-    root.style.transform=`scale(${zoom}) rotateX(${vx}deg) rotateY(${vy}deg)`;
-    updateFaceLetterTransforms();
+    if(drag.mode!=='rotate'){drag.x=event.clientX;drag.y=event.clientY;return;}
+    drag.x=event.clientX;drag.y=event.clientY;const hs=Math.cos(vx*Math.PI/180)<0?-1:1;vy+=dx*.65*hs;vx-=dy*.65;
+    root.style.transform='scale('+zoom+') rotateX('+vx+'deg) rotateY('+vy+'deg)';updateFaceLetterTransforms();
   });
 
   stage.addEventListener('pointerup',async event=>{
     activePointers.delete(event.pointerId);
-    if (pinchActive) {
-      pinchActive = activePointers.size >= 2;
-      if (!pinchActive) { drag = null; }
-      return;
-    }
+    if(pinchActive){pinchActive=activePointers.size>=2;if(!pinchActive)drag=null;return;}
     if(!drag||drag.id!==event.pointerId)return;
-    const g=drag;
-    drag=null;
-    if(g.mode!=='slice' || !g.face || busy)return;
-    const dx=event.clientX-g.startX;
-    const dy=event.clientY-g.startY;
-    if(Math.hypot(dx,dy)<9) {
-      // A tap still turns the selected face in its default direction.
-      await turn(g.face);
-      return;
+    const g=drag;drag=null;
+    if(g.preview&&!busy){suppressClick=true;const p=g.preview,commit=Math.abs(p.angle)>=35,sign=p.angle>=0?1:-1;
+      p.wrapper.style.transition='transform 170ms cubic-bezier(.2,.75,.25,1)';p.wrapper.style.transform='rotate'+['X','Y','Z'][p.axis]+'('+((commit?90*sign:0)*(p.axis===1?1:-1))+'deg)';
+      await wait(190);if(commit){const move=['X','Y','Z'][p.axis]+p.layer+(sign<0?"'":"");apply(move);history.push(move);count++;last=move;status.textContent='Turned '+move+'.';}
+      p.nodes.forEach(n=>root.appendChild(n));p.wrapper.remove();render();metrics();setTimeout(()=>{suppressClick=false;},0);return;
     }
-    suppressClick=true;
-    const piece=g.pieceId==null ? null : pieces.find(p=>p.id===g.pieceId);
-    // If the gesture began on a face center (or hit-testing missed the cubie),
-    // still make the gesture do something useful instead of silently ignoring it.
-    if(!piece || !g.piecePosition) {
-      await turn(g.face, dx < 0);
-      setTimeout(()=>{suppressClick=false;},0);
-      return;
-    }
-
-    // Choose the slice and turn direction by comparing the swipe with the
-    // projected motion of the grabbed cubie for each possible quarter-turn.
-    // This works for all six faces and after rotating the cube in 3D.
-    const swipe=[dx,-dy];
-    const length=Math.hypot(...swipe);
-    const normalAxis=({R:0,L:0,U:1,D:1,F:2,B:2})[g.face];
-    const cosX=Math.cos(vx*Math.PI/180), sinX=Math.sin(vx*Math.PI/180);
-    const cosY=Math.cos(vy*Math.PI/180), sinY=Math.sin(vy*Math.PI/180);
-    const projectVector=v=>{
-      // CSS transform is rotateX(vx) rotateY(vy).
-      const x1=cosY*v[0]+sinY*v[2];
-      const y1=v[1];
-      const z1=-sinY*v[0]+cosY*v[2];
-      const y2=cosX*y1-sinX*z1;
-      return [x1,-y2];
-    };
-    const cross=(a,b)=>[
-      a[1]*b[2]-a[2]*b[1],
-      a[2]*b[0]-a[0]*b[2],
-      a[0]*b[1]-a[1]*b[0]
-    ];
-    let best=null;
-    for(let axis=0;axis<3;axis++){
-      if(axis===normalAxis) continue; // Include coordinate 0 so middle rows/columns can be turned too.
-      const unit=[0,0,0]; unit[axis]=1;
-      // Piece coordinates use +Y upward, while CSS screen coordinates use
-      // +Y downward. Convert the logical rotation velocity before projecting
-      // it, otherwise some rows/columns appear to move in the opposite direction.
-      const logicalVelocity=cross(unit,g.piecePosition);
-      const velocity=projectVector([logicalVelocity[0],-logicalVelocity[1],logicalVelocity[2]]);
-      const vlen=Math.hypot(...velocity);
-      if(vlen<0.001)continue;
-      const score=(velocity[0]*swipe[0]+velocity[1]*swipe[1])/(vlen*length);
-      if(!best||Math.abs(score)>Math.abs(best.score)){
-        best={axis,score};
-      }
-    }
-    if(!best) {
-      // A center cubie has no off-center coordinate to identify a row/column.
-      // Treat its swipe as a turn of the face instead of doing nothing.
-      await turn(g.face, dx < 0);
-      setTimeout(()=>{suppressClick=false;},0);
-      return;
-    }
-    const layer=g.piecePosition[best.axis];
-    const sign=best.score>=0?1:-1;
-    const move=['X','Y','Z'][best.axis]+layer+(sign<0?"'":"");
-    await turnMove(move);
-    setTimeout(()=>{suppressClick=false;},0);
+    if(g.mode!=='slice'||!g.face||busy)return;
+    const dx=event.clientX-g.startX,dy=event.clientY-g.startY;if(Math.hypot(dx,dy)<9){await turn(g.face);return;}
+    suppressClick=true;const piece=g.pieceId==null?null:pieces.find(p=>p.id===g.pieceId);
+    if(!piece||!g.piecePosition){await turn(g.face,dx<0);setTimeout(()=>{suppressClick=false;},0);return;}
+    const swipe=[dx,-dy],len=Math.hypot(...swipe),normal=({R:0,L:0,U:1,D:1,F:2,B:2})[g.face];
+    const cx=Math.cos(vx*Math.PI/180),sx=Math.sin(vx*Math.PI/180),cy=Math.cos(vy*Math.PI/180),sy=Math.sin(vy*Math.PI/180);
+    const project=v=>{const x=cy*v[0]+sy*v[2],y=v[1],z=-sy*v[0]+cy*v[2];return [x,-(cx*y-sx*z)];};
+    const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+    let best=null;for(let axis=0;axis<3;axis++){if(axis===normal)continue;const unit=[0,0,0];unit[axis]=1;const lv=cross(unit,g.piecePosition),v=project([lv[0],-lv[1],lv[2]]),vl=Math.hypot(...v);if(vl<.001)continue;const score=(v[0]*swipe[0]+v[1]*swipe[1])/(vl*len);if(!best||Math.abs(score)>Math.abs(best.score))best={axis,score};}
+    if(!best){await turn(g.face,dx<0);setTimeout(()=>{suppressClick=false;},0);return;}
+    await turnMove(['X','Y','Z'][best.axis]+g.piecePosition[best.axis]+(best.score<0?"'":""));setTimeout(()=>{suppressClick=false;},0);
   });
+
   stage.addEventListener('pointercancel',event=>{
     activePointers.delete(event.pointerId);
     drag=null;
