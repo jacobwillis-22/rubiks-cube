@@ -220,10 +220,11 @@
 </div>
 
 <section class="features-panel" aria-label="All Rubik's Cube features">
-  <div class="features-title">🧊 Cube features</div>
-  <div class="features-subtitle">Everything you can do with this interactive Rubik’s Cube.</div>
+  <div class="features-title">Cube features</div>
+  <div class="features-subtitle">Controls and tools for using the interactive Rubik’s Cube.</div>
   <div class="feature-grid">
-    <div class="feature-card"><strong>🖐️ Interactive 3D cube</strong><span>Drag the background to rotate the view, or drag a sticker to turn a row or column.</span></div>
+    <div class="feature-card"><strong>🖱️ Mouse controls (PC)</strong><span>Left-click and drag a sticker to turn its row or column. Right-click and drag anywhere on the cube to rotate the whole view. Right-click menus are disabled inside the cube.</span></div>
+    <div class="feature-card"><strong>☝️ Touch controls</strong><span>Drag a sticker to turn a row or column; drag the empty background to rotate the view. Pinch with two fingers to zoom.</span></div>
     <div class="feature-card"><strong>🤏 Pinch & zoom</strong><span>Pinch two fingers on a touchscreen or use the mouse wheel to zoom in and out.</span></div>
     <div class="feature-card"><strong>🔀 Scramble</strong><span>Generate a 20-turn scramble and keep rotating the view while it animates.</span></div>
     <div class="feature-card"><strong>↶ Undo & reset</strong><span>Undo turns or reset the cube back to its solved starting state.</span></div>
@@ -809,10 +810,18 @@
     root.style.transform = `scale(${zoom}) rotateX(${vx}deg) rotateY(${vy}deg)`;
   }, { passive: false });
 
+  stage.addEventListener('contextmenu',event=>{
+    // Right-click is a drag control for rotating the cube, not the browser menu.
+    event.preventDefault();
+  });
+
   stage.addEventListener('pointerdown',event=>{
     if (event.target.closest('button')) return;
+    // On desktop, only the primary and secondary mouse buttons control the cube.
+    if (event.pointerType==='mouse' && event.button!==0 && event.button!==2) return;
+    const rotateView = event.pointerType==='mouse' ? event.button===2 : false;
     activePointers.set(event.pointerId, {x:event.clientX, y:event.clientY});
-    if (activePointers.size >= 2) {
+    if (activePointers.size >= 2 && event.pointerType!=='mouse') {
       const pts = [...activePointers.values()];
       pinchStartDistance = Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
       pinchStartZoom = zoom;
@@ -825,16 +834,21 @@
     // Resolve the visible sticker/face even when the pointer lands on a child element.
     const faceEl = event.target.closest('.face, .sticker');
     const face = faceEl && (faceEl.classList.contains('face') ? faceEl.dataset.dir : faceEl.parentElement?.dataset.dir);
-    // While scrambling, allow background drags to rotate the view, but don't
-    // start a slice-turn gesture on the moving cubies.
-    if(busy && face) return;
+    // A right mouse drag always rotates the view. On touch, the background rotates
+    // the view and a sticker drag turns a layer. Left mouse drag turns a layer.
+    const mode = rotateView ? 'rotate' :
+      event.pointerType==='mouse' ? (face ? 'slice' : 'idle') :
+      (face ? 'slice' : 'rotate');
+    if(busy && face && mode==='slice') {
+      activePointers.delete(event.pointerId);
+      return;
+    }
     const cubieEl = event.target.closest('.cubie');
     const piece = cubieEl && pieces.find(p=>p.id===Number(cubieEl.dataset.id));
     drag={x:event.clientX,y:event.clientY,startX:event.clientX,startY:event.clientY,
-      id:event.pointerId,face:face || null,pieceId:piece ? piece.id : null,
+      id:event.pointerId,face:mode==='slice' ? (face || null) : null,
+      mode,pieceId:piece ? piece.id : null,
       piecePosition:piece ? [...piece.p] : null,moved:false};
-    // Capture touch and mouse drags so vertical gestures rotate the cube too.
-    // To scroll the page on a touchscreen, start the swipe outside the cube stage.
     stage.setPointerCapture(event.pointerId);
     event.preventDefault();
   });
@@ -858,8 +872,8 @@
     const totalY=event.clientY-drag.startY;
     if(Math.hypot(totalX,totalY)>8) drag.moved=true;
 
-    if(drag.face) {
-      // Face gestures are reserved for turning a layer; they never rotate the whole cube.
+    if(drag.mode!=='rotate') {
+      // Sticker drags turn a slice on release; idle left-clicks on empty space do nothing.
       drag.x=event.clientX; drag.y=event.clientY;
       return;
     }
@@ -882,7 +896,7 @@
     if(!drag||drag.id!==event.pointerId)return;
     const g=drag;
     drag=null;
-    if(!g.face || busy)return;
+    if(g.mode!=='slice' || !g.face || busy)return;
     const dx=event.clientX-g.startX;
     const dy=event.clientY-g.startY;
     if(Math.hypot(dx,dy)<9) {
