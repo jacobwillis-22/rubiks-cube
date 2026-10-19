@@ -949,62 +949,60 @@
     metrics();
   }
 
-  // Convert between the cube's fixed coordinates and the directions currently
-  // facing the viewer. CSS applies rotateY(vy) then rotateX(vx).
+  // Map fixed cube directions to the nearest screen-facing directions. The
+  // mapping is used only to reinterpret moves when the cube is reoriented.
   function viewFaceMap() {
     const rx=vx*Math.PI/180, ry=vy*Math.PI/180;
-    const rotateToScreen = ([x,y,z]) => {
+    const rotateToScreen=([x,y,z])=>{
       const x1=x*Math.cos(ry)+z*Math.sin(ry);
       const z1=-x*Math.sin(ry)+z*Math.cos(ry);
-      return [x1, y*Math.cos(rx)-z1*Math.sin(rx), y*Math.sin(rx)+z1*Math.cos(rx)];
+      return [x1,y*Math.cos(rx)-z1*Math.sin(rx),y*Math.sin(rx)+z1*Math.cos(rx)];
     };
     const axes=[
       {positive:'R',negative:'L',v:[1,0,0]},
       {positive:'U',negative:'D',v:[0,1,0]},
       {positive:'F',negative:'B',v:[0,0,1]}
     ];
-    const fixedVectors=Object.fromEntries(dirs.map(d=>[d,rotateToScreen(V[d])]));
     const permutations=[[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]];
-    let assignment=permutations[0], bestScore=-Infinity;
+    const rotated=Object.fromEntries(dirs.map(d=>[d,rotateToScreen(V[d])]));
+    let assignment=permutations[0],bestScore=-Infinity;
     for(const p of permutations){
       const score=['R','U','F'].reduce((sum,d,i)=>{
-        const v=fixedVectors[d], axis=axes[p[i]].v;
-        return sum+Math.abs(v.reduce((n,x,j)=>n+x*axis[j],0));
+        const v=rotated[d],a=axes[p[i]].v;
+        return sum+Math.abs(v.reduce((n,x,j)=>n+x*a[j],0));
       },0);
       if(score>bestScore){bestScore=score;assignment=p;}
     }
-    const fixedToScreen={};
+    const map={};
     for(const d of dirs){
       const sourceAxis=(d==='R'||d==='L')?0:(d==='U'||d==='D')?1:2;
-      const v=rotateToScreen(V[d]), axis=axes[assignment[sourceAxis]];
-      const dot=v.reduce((sum,n,i)=>sum+n*axis.v[i],0);
-      fixedToScreen[d]=dot>=0?axis.positive:axis.negative;
+      const v=rotated[d],a=axes[assignment[sourceAxis]];
+      map[d]=v.reduce((n,x,j)=>n+x*a.v[j],0)>=0?a.positive:a.negative;
     }
-    return fixedToScreen;
+    return map;
   }
 
   function screenMoveToFixed(move) {
     const map=viewFaceMap();
-    const inverseMap=Object.fromEntries(Object.entries(map).map(([fixed,screen])=>[screen,fixed]));
-    const fixed=inverseMap[move[0]];
-    return fixed ? fixed+move.slice(1) : move;
+    const fixed=Object.keys(map).find(dir=>map[dir]===move[0]);
+    return fixed?fixed+move.slice(1):move;
   }
 
   function updateFaceLetterTransforms() {
-    const inverseFace = { F:'', B:'rotateY(-180deg)', R:'rotateY(-90deg)', L:'rotateY(90deg)', U:'rotateX(-90deg)', D:'rotateX(90deg)' };
+    const inverseFace={F:'',B:'rotateY(-180deg)',R:'rotateY(-90deg)',L:'rotateY(90deg)',U:'rotateX(-90deg)',D:'rotateX(90deg)'};
     const map=viewFaceMap();
-    root.querySelectorAll('.face-letter').forEach(letter => {
-      const dir = letter.parentElement.dataset.dir || 'F';
-      const screenDir=map[dir] || dir;
-      letter.textContent = screenDir;
-      letter.style.transform = `${inverseFace[dir]} rotateY(${-vy}deg) rotateX(${-vx}deg) translateZ(0.6px)`;
-      letter.parentElement.setAttribute('aria-label', 'Turn screen-facing ' + screenDir + ' face');
+    root.querySelectorAll('.face-letter').forEach(letter=>{
+      const dir=letter.parentElement.dataset.dir||'F';
+      const screenDir=map[dir]||dir;
+      letter.textContent=screenDir;
+      letter.style.transform=`${inverseFace[dir]} rotateY(${-vy}deg) rotateX(${-vx}deg) translateZ(0.6px)`;
+      letter.parentElement.setAttribute('aria-label','Turn screen-facing '+screenDir+' face');
       letter.parentElement.dataset.screenDir=screenDir;
     });
-    app.querySelectorAll('[data-move]').forEach(button => {
-      const move=button.dataset.move;
-      const mapped=screenMoveToFixed(move);
-      button.title='Turn screen-facing '+move[0]+' face ('+mapped+')';
+    app.querySelectorAll('[data-move]').forEach(button=>{
+      const move=button.dataset.move,face=move[0],mapped=screenMoveToFixed(move);
+      button.textContent=face+(move.slice(1)==="'"?"′":move.slice(1));
+      button.title='Turn the screen-facing '+face+' side (internal move '+mapped+')';
     });
   }
 
