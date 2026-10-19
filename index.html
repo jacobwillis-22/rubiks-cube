@@ -339,15 +339,22 @@
 
   function explainMove(move, index, total) {
     const face = move[0];
-    const faceNames = { U:'top (up)', D:'bottom (down)', R:'right', L:'left', F:'front', B:'back' };
+    const faceNames = { U:'top', D:'bottom', R:'right', L:'left', F:'front', B:'back' };
     const faceName = faceNames[face] || face;
-    const amount = move.endsWith('2') ? 'a half-turn (180°)' : move.endsWith("'") ? 'a counterclockwise quarter-turn (90°)' : 'a clockwise quarter-turn (90°)';
-    const moveMeaning = faceName + ' face makes ' + amount + '.';
-    const planReason = index===0
-      ? 'This is the first move in the calculated plan. The solver chose it based on the current positions and orientations of all the pieces.'
-      : 'This is move ' + (index+1) + ' of ' + total + '. It works together with the surrounding moves to reposition and orient pieces while bringing the whole cube toward the solved state.';
-    const caveat = ' One move may not make the cube look more solved by itself; later moves can restore pieces temporarily moved out of place.';
-    return moveMeaning + ' ' + planReason + caveat;
+    const turn = move.endsWith('2')
+      ? 'turn it halfway around (180°)'
+      : move.endsWith("'")
+        ? 'turn it counterclockwise (90°)'
+        : 'turn it clockwise (90°)';
+    const faceMeaning = 'Turn the ' + faceName + ' layer: ' + turn + '.';
+    const moveMeaning = move.endsWith('2')
+      ? 'That moves the pieces around that face by half a turn.'
+      : 'That moves the edge and corner pieces around that face.';
+    const why = index === 0
+      ? 'Why now? This is the first part of the solver’s plan. It moves pieces into a setup that later turns can use to finish solving the cube.'
+      : 'Why now? The solver puts this turn here because it works with the turns before and after it. Together, they move pieces toward their correct places.';
+    const reminder = ' This one turn might not make the cube look more solved. That’s okay—some pieces may move out of place briefly so the next turns can put them where they belong.';
+    return faceMeaning + ' ' + moveMeaning + ' ' + why + reminder;
   }
 
   function updateSolutionUI() {
@@ -362,7 +369,7 @@
     solutionList.replaceChildren();
     if(!loaded) {
       solutionList.textContent='Your solution moves will appear here.';
-      moveExplanation.innerHTML='<strong>Move explanations</strong>Calculate a solution to see what each move turns and why it is included in the plan.';
+      moveExplanation.innerHTML='<strong>How to read the moves</strong>Each explanation tells you which layer to turn, which way to turn it, and how the turn fits into the solver’s full plan.';
       return;
     }
     solutionMoves.forEach((move,i)=>{
@@ -373,7 +380,7 @@
       solutionList.appendChild(token);
     });
     if(solutionIndex>=solutionMoves.length) {
-      moveExplanation.innerHTML='<strong>Why this worked</strong>The planned sequence is complete. The cube should now be solved.';
+      moveExplanation.innerHTML='<strong>Why this worked</strong>The solver’s full sequence is finished. The turns worked together to put all the pieces back in their solved positions.';
     } else {
       moveExplanation.innerHTML='<strong>Why this move?</strong>'+explainMove(solutionMoves[solutionIndex], solutionIndex, solutionMoves.length);
     }
