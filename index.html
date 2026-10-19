@@ -4,10 +4,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Rubik's Cube — Interactive Guide</title>
+<title>Rubik's Cube — Fullscreen</title>
 <style>
   :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
-  body { margin: 0; padding: 16px; max-width: 980px; margin-inline: auto; }
+  body { margin: 0; padding: 16px; max-width: 700px; margin-inline: auto; }
   body:has(#cube-app.fullscreen-mode) { max-width: none; padding: 0; }
   #cube-app.fullscreen-mode, #cube-app:fullscreen {
     position: fixed; inset: 0; z-index: 9999; overflow: auto;
@@ -23,21 +23,21 @@
   #c-fullscreen { white-space: nowrap; }
   #cube-app { color: CanvasText; }
   .stage {
-    height: 390px; position: relative; overflow: hidden; border-radius: 14px;
+    height: 310px; position: relative; overflow: hidden; border-radius: 14px;
     background: radial-gradient(ellipse at center,#344352,#18222d 65%,#10161e);
     touch-action: none; user-select: none;
   }
   .scene { position: absolute; inset: 0; perspective: 850px; }
   .root { position: absolute; left: 50%; top: 48%; width: 0; height: 0; transform-style: preserve-3d; will-change: transform; }
-  .cubie { position: absolute; width: 58px; height: 58px; left: -29px; top: -29px; transform-style: preserve-3d; backface-visibility: hidden; }
-  .face { position: absolute; width: 58px; height: 58px; background: #090b0e; border: 1px solid #07090b; border-radius: 4px; backface-visibility: hidden; }
+  .cubie { position: absolute; width: 48px; height: 48px; left: -24px; top: -24px; transform-style: preserve-3d; backface-visibility: hidden; }
+  .face { position: absolute; width: 48px; height: 48px; background: #090b0e; border: 1px solid #07090b; border-radius: 4px; backface-visibility: hidden; }
   .sticker { position: absolute; inset: 3px; border-radius: 4px; box-shadow: inset 0 1px 1px #ffffff45, inset 0 -2px 2px #0004; }
-  .face[data-dir="F"] { transform: translateZ(29px); }
-  .face[data-dir="B"] { transform: rotateY(180deg) translateZ(29px); }
-  .face[data-dir="R"] { transform: rotateY(90deg) translateZ(29px); }
-  .face[data-dir="L"] { transform: rotateY(-90deg) translateZ(29px); }
-  .face[data-dir="U"] { transform: rotateX(90deg) translateZ(29px); }
-  .face[data-dir="D"] { transform: rotateX(-90deg) translateZ(29px); }
+  .face[data-dir="F"] { transform: translateZ(24px); }
+  .face[data-dir="B"] { transform: rotateY(180deg) translateZ(24px); }
+  .face[data-dir="R"] { transform: rotateY(90deg) translateZ(24px); }
+  .face[data-dir="L"] { transform: rotateY(-90deg) translateZ(24px); }
+  .face[data-dir="U"] { transform: rotateX(90deg) translateZ(24px); }
+  .face[data-dir="D"] { transform: rotateX(-90deg) translateZ(24px); }
   .center { cursor: pointer; }
   button {
     border: 1px solid #8886; border-radius: 9px; background: Canvas; color: CanvasText;
@@ -53,47 +53,17 @@
   .heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 8px; }
   .heading-title { font-size: 19px; font-weight: 800; }
   .count { font-size: 26px; font-weight: 800; text-align: right; }
-  .guide-toggle { white-space: nowrap; }
-  .guide-backdrop { position: fixed; inset: 0; z-index: 10000; background: #02061799; opacity: 0; pointer-events: none; transition: opacity .22s ease; }
-  .guide-backdrop.open { opacity: 1; pointer-events: auto; }
-  .guide-panel { position: fixed; z-index: 10001; top: 0; right: 0; bottom: 0; width: min(390px, 92vw); box-sizing: border-box; padding: 20px; overflow-y: auto; background: Canvas; color: CanvasText; border-left: 1px solid #8885; box-shadow: -18px 0 48px #0003; transform: translateX(105%); visibility: hidden; transition: transform .25s ease, visibility .25s; }
-  .guide-panel.open { transform: translateX(0); visibility: visible; }
-  .guide-top { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px; }
-  .guide-top h2 { margin:0; font-size:20px; }
-  .guide-card { border:1px solid #8885; border-radius:13px; padding:13px; margin:12px 0; }
-  .guide-card h3 { margin:0 0 7px; font-size:15px; }
-  .guide-card p, .guide-card li { font-size:14px; line-height:1.5; }
-  .guide-card p { margin:7px 0; }
-  .guide-card ul { padding-left:20px; margin:7px 0; }
-  .guide-art { display:flex; justify-content:center; align-items:center; gap:20px; width:100%; margin:10px auto 5px; }
-  .guide-grid { display:grid; grid-template-columns:repeat(3, 24px); gap:3px; padding:4px; background:#202833; border-radius:7px; border:2px solid #111827; }
-  .guide-grid span { width:24px; height:24px; border-radius:3px; background:#394452; }
-  .guide-grid.cross span { background:#394452; }
-  .guide-grid.cross span:nth-child(2), .guide-grid.cross span:nth-child(4), .guide-grid.cross span:nth-child(5), .guide-grid.cross span:nth-child(6), .guide-grid.cross span:nth-child(8) { background:#f7f7f3; }
-  .guide-grid.row span:nth-child(n+4):nth-child(-n+6) { background:#f7c948; }
-  .guide-grid.column span:nth-child(2), .guide-grid.column span:nth-child(5), .guide-grid.column span:nth-child(8) { background:#55d6a7; }
-  .guide-arrow { font-size:26px; font-weight:800; color:#f7c948; text-align:center; }
-  .guide-diagram-label { font-size:11px; text-align:center; margin-top:4px; opacity:.85; }
-  .guide-diagram { min-width:0; }
-  .guide-step { display:flex; gap:10px; align-items:flex-start; }
-  .guide-step-num { flex:0 0 27px; height:27px; border-radius:50%; display:grid; place-items:center; background:#2563eb; color:white; font-weight:800; }
-  .guide-note { font-size:12px; opacity:.7; }
-  @media (max-width: 520px) {
-    body { padding: 10px; }
-    .stage { height: 335px; }
-    .cubie { width: 46px; height: 46px; left: -23px; top: -23px; }
-    .face { width: 46px; height: 46px; }
-    .face[data-dir="F"] { transform: translateZ(23px); }
-    .face[data-dir="B"] { transform: rotateY(180deg) translateZ(23px); }
-    .face[data-dir="R"] { transform: rotateY(90deg) translateZ(23px); }
-    .face[data-dir="L"] { transform: rotateY(-90deg) translateZ(23px); }
-    .face[data-dir="U"] { transform: rotateX(90deg) translateZ(23px); }
-    .face[data-dir="D"] { transform: rotateX(-90deg) translateZ(23px); }
-    .heading { align-items:flex-start; }
-    .heading-title { font-size:18px; }
-    .heading .muted { max-width:220px; }
-    .stats { flex-wrap:wrap; }
-    .stat { min-width:100px; }
+  @media (max-width: 430px) {
+  
+    .stage { height: 285px; }
+    .cubie { width: 42px; height: 42px; left: -21px; top: -21px; }
+    .face { width: 42px; height: 42px; }
+    .face[data-dir="F"] { transform: translateZ(21px); }
+    .face[data-dir="B"] { transform: rotateY(180deg) translateZ(21px); }
+    .face[data-dir="R"] { transform: rotateY(90deg) translateZ(21px); }
+    .face[data-dir="L"] { transform: rotateY(-90deg) translateZ(21px); }
+    .face[data-dir="U"] { transform: rotateX(90deg) translateZ(21px); }
+    .face[data-dir="D"] { transform: rotateX(-90deg) translateZ(21px); }
   }
   @media (prefers-reduced-motion: reduce) { .guide-panel, .guide-backdrop { transition:none; } }
 </style>
@@ -106,7 +76,6 @@
       <div class="muted">Drag a row or column in your swipe direction · Drag background to rotate</div>
     </div>
     <div style="display:flex;align-items:center;gap:12px">
-      <button id="c-guide-open" class="guide-toggle" type="button" aria-controls="c-guide" aria-expanded="false">☷ Guide</button>
       <button id="c-fullscreen" type="button" aria-label="Enter fullscreen">⛶ Fullscreen</button>
       <div>
         <div class="muted" style="text-align:right">MOVES</div>
@@ -143,43 +112,12 @@
   </div>
 </div>
 
-<div id="c-guide-backdrop" class="guide-backdrop" aria-hidden="true"></div>
-<aside id="c-guide" class="guide-panel" role="dialog" aria-modal="true" aria-labelledby="c-guide-title" aria-hidden="true" inert>
-  <div class="guide-top">
-    <h2 id="c-guide-title">Cube Coach</h2>
-    <button id="c-guide-close" type="button" aria-label="Close guide">✕</button>
-  </div>
-  <div id="c-guide-content" aria-live="polite"></div>
-  <p class="guide-note">Tips update as the cube changes. The pictures are visual guides; they do not inspect a complete solving algorithm.</p>
-</aside>
-
-<script>
-// Show actionable diagnostics if a browser blocks or fails to run part of the widget.
-(() => {
-  function report(message) {
-    let panel = document.getElementById('c-error-report');
-    if (!panel) {
-      panel = document.createElement('pre');
-      panel.id = 'c-error-report';
-      panel.style.cssText = 'position:fixed;left:8px;right:8px;bottom:8px;z-index:20000;max-height:35vh;overflow:auto;white-space:pre-wrap;background:#7f1d1d;color:white;padding:12px;border-radius:8px;font:12px/1.4 monospace';
-      document.body.appendChild(panel);
-    }
-    panel.textContent = 'Rubik’s Cube diagnostic: ' + message;
-  }
-  window.addEventListener('error', event => report(event.message || 'A script or resource failed to load.'));
-  window.addEventListener('unhandledrejection', event => report(String(event.reason || 'An asynchronous operation failed.')));
-})();
-</script>
 <script>
 (() => {
   const app = document.getElementById('cube-app');
   const root = app.querySelector('#c-root');
   const stage = app.querySelector('#c-stage');
   const fullscreenButton = app.querySelector('#c-fullscreen');
-  const guidePanel = document.getElementById('c-guide');
-  const guideBackdrop = document.getElementById('c-guide-backdrop');
-  const guideContent = document.getElementById('c-guide-content');
-  const guideOpenButton = app.querySelector('#c-guide-open');
 
   const colors = {
     U:'#f7f7f3', D:'#ffd500', F:'#d92832',
@@ -203,7 +141,6 @@
   let vx = -25;
   let vy = -35;
   let last = 'Ready';
-  let hasScrambled = false;
 
   const status = app.querySelector('#c-status');
   const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -240,63 +177,12 @@
       signature()===solved ? 'Solved' : 'In progress';
     app.querySelector('#c-last').textContent = last;
     app.querySelector('#c-undo').disabled = busy || !history.length;
-    updateGuideContent();
   }
 
-
-  function guidePicture(kind) {
-    const cells = '<span></span>'.repeat(9);
-    if (kind === 'solved') return `<div class="guide-art" role="img" aria-label="Solved cube illustration"><div class="guide-diagram"><div class="guide-grid">${'<span style="background:#f7f7f3"></span>'.repeat(9)}</div><div class="guide-diagram-label">Top: white</div></div><div class="guide-diagram"><div class="guide-grid">${'<span style="background:#d92832"></span>'.repeat(9)}</div><div class="guide-diagram-label">Front: red</div></div><div class="guide-diagram"><div class="guide-grid">${'<span style="background:#1768df"></span>'.repeat(9)}</div><div class="guide-diagram-label">Side: blue</div></div></div>`;
-    if (kind === 'slice') return `<div class="guide-art" role="img" aria-label="Row and column drag directions"><div class="guide-diagram"><div class="guide-grid row">${cells}</div><div class="guide-arrow">↔</div><div class="guide-diagram-label">DRAG A ROW</div></div><div class="guide-diagram"><div class="guide-grid column">${cells}</div><div class="guide-arrow" style="color:#55d6a7">↕</div><div class="guide-diagram-label">DRAG A COLUMN</div></div></div>`;
-    return `<div class="guide-art" role="img" aria-label="White cross solving goal"><div class="guide-diagram"><div class="guide-grid cross">${cells}</div><div class="guide-diagram-label">Target: white cross</div></div></div>`;
-  }
-
-  function updateGuideContent() {
-    if (!guideContent) return;
-    const isSolved = typeof solved !== 'undefined' && solved && signature() === solved;
-    let title, intro, picture, steps;
-    if (busy) {
-      title = 'Scramble in progress';
-      intro = 'Your cube is moving through a scramble. You can still rotate the view by dragging the empty background.';
-      picture = 'slice';
-      steps = ['Watch the cube from any angle while the moves play.', 'When the scramble finishes, start with the white cross.', 'Open this guide again for the next suggested step.'];
-    } else if (isSolved) {
-      title = 'Your cube is solved!';
-      intro = 'Every cubie is back in its solved position. You can scramble it for a new challenge or practice a few moves.';
-      picture = 'solved';
-      steps = ['Press Scramble for a fresh puzzle.', 'Drag a sticker to turn its row or column.', 'Use Undo to reverse your last recorded turn.'];
-    } else if (!hasScrambled && count === 0 && history.length === 0) {
-      title = 'Ready to begin';
-      intro = 'Your cube is currently in its starting state. Scramble it to create a puzzle, or practice the slice controls first.';
-      picture = 'slice';
-      steps = ['Press Scramble to mix the cube.', 'Drag a sticker horizontally to try a row turn.', 'Drag vertically to try a column turn; drag the background to rotate the view.'];
-    } else {
-      title = 'Next step: build the white cross';
-      intro = 'The cube is scrambled or partly solved. A useful beginner method starts by placing the four white edge pieces around the white center, while matching each edge’s other color to its side center.';
-      picture = 'cross';
-      steps = ['Find the white center and the four white edge pieces (each has two colors).', 'Move each white edge next to the white center to form a plus sign.', 'Check the side color of each edge matches its center. If you already have the cross, continue with the four first-layer corners.'];
-    }
-    guideContent.innerHTML = `<section class="guide-card"><h3>${title}</h3><p>${intro}</p>${guidePicture(picture)}</section><section class="guide-card"><h3>What to do next</h3>${steps.map((step,i)=>`<div class="guide-step"><span class="guide-step-num">${i+1}</span><p>${step}</p></div>`).join('')}</section><section class="guide-card"><h3>Controls</h3>${guidePicture('slice')}<ul><li><b>Sticker drag:</b> turn a row or column with your swipe.</li><li><b>Background drag:</b> rotate the view.</li><li><b>Undo:</b> reverse the most recent recorded move.</li></ul></section>`;
-  }
-
-  function setGuideOpen(open) {
-    guidePanel.classList.toggle('open', open);
-    guideBackdrop.classList.toggle('open', open);
-    guidePanel.setAttribute('aria-hidden', String(!open));
-    guidePanel.inert = !open;
-    guideBackdrop.setAttribute('aria-hidden', String(!open));
-    guideOpenButton.setAttribute('aria-expanded', String(open));
-    if (open) {
-      updateGuideContent();
-      app.querySelector('#c-guide-close').focus();
-    } else {
-      guideOpenButton.focus();
-    }
-  }
 
   function render() {
     const fragment = document.createDocumentFragment();
-    const unit = innerWidth < 520 ? 50 : 62;
+    const unit = innerWidth < 430 ? 45 : 52;
 
     for (const p of pieces) {
       const el = document.createElement('div');
@@ -384,10 +270,7 @@
 
   function lock(value) {
     busy=value;
-    app.querySelectorAll('button').forEach(button=>{
-      if (button.id === 'c-guide-open' || button.id === 'c-fullscreen') return;
-      button.disabled=value;
-    });
+    app.querySelectorAll('button').forEach(button=>button.disabled=value);
     if(!value) metrics();
   }
 
@@ -557,7 +440,6 @@
     init();
     history=[];
     count=0;
-    hasScrambled=false;
     vx=-25;
     vy=-35;
     last='Reset';
@@ -595,19 +477,11 @@
     }
 
     last='Scramble';
-    hasScrambled=true;
     status.textContent='Scramble complete.';
     lock(false);
     render();
   });
 
-
-  guideOpenButton.addEventListener('click', () => setGuideOpen(true));
-  app.querySelector('#c-guide-close').addEventListener('click', () => setGuideOpen(false));
-  guideBackdrop.addEventListener('click', () => setGuideOpen(false));
-  document.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && guidePanel.classList.contains('open')) setGuideOpen(false);
-  });
 
   async function toggleFullscreen() {
     try {
