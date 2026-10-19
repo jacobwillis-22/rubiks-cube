@@ -252,6 +252,8 @@
   let solutionExpectedState = null;
   let solverReady = false;
   let solverInitializing = false;
+  let solverWorker = null;
+  let solverRequestId = 0;
 
   const status = app.querySelector('#c-status');
   const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -329,25 +331,83 @@
     });
   }
 
+  function getSolverWorker() {
+    if (solverWorker) return solverWorker;
+    if (!('Worker' in window) || !('Blob' in window) || !window.URL?.createObjectURL) {
+      throw new Error('This browser does not support background solving. Please update your browser.');
+    }
+    const workerCode = `
+      let ready = false;
+      self.onmessage = function(event) {
+        const { id, facelets } = event.data || {};
+        try {
+          if (!self.Cube) {
+            importScripts(
+              'https://cdn.jsdelivr.net/npm/cubejs@1.3.2/lib/cube.min.js',
+              'https://cdn.jsdelivr.net/npm/cubejs@1.3.2/lib/solve.js'
+            );
+          }
+          if (!ready) {
+            self.postMessage({ id, status: 'initializing' });
+            self.Cube.initSolver();
+            ready = true;
+          }
+          const cube = self.Cube.fromString(facelets);
+          const algorithm = cube.solve();
+          self.postMessage({ id, ok: true, algorithm });
+        } catch (error) {
+          self.postMessage({ id, ok: false, error: String(error && error.message || error) });
+        }
+      };
+    `;
+    const blob = new Blob([workerCode], { type: 'text/javascript' });
+    const workerUrl = URL.createObjectURL(blob);
+    solverWorker = new Worker(workerUrl);
+    URL.revokeObjectURL(workerUrl);
+    return solverWorker;
+  }
+
+  function calculateSolutionInBackground(facelets) {
+    return new Promise((resolve, reject) => {
+      let worker;
+      try { worker = getSolverWorker(); }
+      catch (error) { reject(error); return; }
+      const id = ++solverRequestId;
+      const handleMessage = event => {
+        const data = event.data || {};
+        if (data.id !== id) return;
+        if (data.status === 'initializing') {
+          solverStatus.textContent = 'Building solver tables in the background… the cube should stay responsive.';
+          return;
+        }
+        worker.removeEventListener('message', handleMessage);
+        worker.removeEventListener('error', handleError);
+        if (data.ok) resolve(data.algorithm);
+        else reject(new Error(data.error || 'The solver could not calculate a solution.'));
+      };
+      const handleError = event => {
+        worker.removeEventListener('message', handleMessage);
+        worker.removeEventListener('error', handleError);
+        solverWorker = null;
+        reject(new Error(event.message || 'The background solver failed to load. Check your internet connection.'));
+      };
+      worker.addEventListener('message', handleMessage);
+      worker.addEventListener('error', handleError);
+      worker.postMessage({ id, facelets });
+    });
+  }
+
   async function findFullSolution() {
     if (busy || solverInitializing) return;
-    if (typeof window.Cube === 'undefined') {
-      solverStatus.textContent='Could not load the solver library. Check your internet connection and refresh the page.';
-      return;
-    }
     solverInitializing=true;
     findSolutionButton.disabled=true;
-    solverStatus.textContent=solverReady ? 'Calculating a solution…' : 'Preparing the solver for its first run…';
-    await new Promise(resolve=>setTimeout(resolve,80));
+    solverStatus.textContent=solverReady ? 'Calculating a solution in the background…' : 'Starting the background solver…';
+    await new Promise(resolve=>setTimeout(resolve,40));
     try {
-      if(!solverReady) {
-        window.Cube.initSolver();
-        solverReady=true;
-      }
       const facelets=cubeFacelets();
       if(facelets.length!==54 || facelets.includes('?')) throw new Error('Could not read all 54 cube stickers.');
-      const cube=window.Cube.fromString(facelets);
-      const algorithm=cube.solve();
+      const algorithm=await calculateSolutionInBackground(facelets);
+      solverReady=true;
       solutionMoves=algorithm.trim() ? algorithm.trim().split(/\s+/) : [];
       solutionIndex=0;
       solutionExpectedState=signature();
@@ -361,7 +421,7 @@
       solutionMoves=[];
       solutionIndex=0;
       solutionExpectedState=null;
-      solverStatus.textContent='I could not solve this cube state. Try Reset or scramble the cube using the app, then calculate again.';
+      solverStatus.textContent='The solver could not finish. You can keep using the cube; check your internet connection and try again.';
       solutionList.textContent=String(error?.message || error);
       updateSolutionUI();
     } finally {
