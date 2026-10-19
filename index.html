@@ -314,6 +314,7 @@
   let last = 'Ready';
   let solutionMoves = [];
   let solutionStages = [];
+  let solutionCalculated = false;
   let solutionIndex = 0;
   let solutionExpectedState = null;
   let solverReady = false;
@@ -470,7 +471,7 @@
   }
 
   function updateSolutionUI() {
-    const loaded = solutionMoves.length > 0;
+    const loaded = solutionCalculated;
     const current = currentSolutionStage();
     solutionProgress.textContent = loaded
       ? (solutionIndex >= solutionMoves.length ? 'Solution complete! 🎉' :
@@ -629,6 +630,7 @@
       solverReady=true;
       solutionStages=result.stages || [];
       solutionMoves=result.moves || [];
+      solutionCalculated=true;
       solutionIndex=0;
       solutionExpectedState=signature();
       if(!solutionMoves.length) {
@@ -640,6 +642,7 @@
     } catch(error) {
       solutionMoves=[];
       solutionStages=[];
+      solutionCalculated=false;
       solutionIndex=0;
       solutionExpectedState=null;
       solverStatus.textContent='The beginner-method solver could not finish. You can keep using the cube; try calculating again.';
@@ -659,6 +662,7 @@
         solverStatus.textContent='The cube changed since this solution was calculated. Find a fresh solution first.';
         solutionMoves=[];
         solutionStages=[];
+        solutionCalculated=false;
         solutionIndex=0;
         solutionExpectedState=null;
         updateSolutionUI();
@@ -680,6 +684,7 @@
       solverStatus.textContent='The cube changed since this solution was calculated. Find a fresh solution first.';
       solutionMoves=[];
       solutionStages=[];
+      solutionCalculated=false;
       solutionIndex=0;
       solutionExpectedState=null;
       updateSolutionUI();
