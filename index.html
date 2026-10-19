@@ -120,6 +120,7 @@
   .solver-status { font-size: 12px; line-height: 1.4; margin-top: 10px; }
   .solver-progress { font-size: 12px; font-weight: 800; margin-top: 12px; }
   .solution-list { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.8; margin-top: 7px; overflow-wrap: anywhere; }
+  .solution-list .solution-stage-heading { margin-top: 10px; padding: 5px 7px; border-radius: 6px; background: color-mix(in srgb, #2563eb 12%, Canvas); font-family: inherit; font-weight: 800; line-height: 1.4; }
   .solution-list .current-move { background: #facc15; color: #27200a; border-radius: 4px; padding: 2px 4px; font-weight: 900; }
   .solver-buttons { display: flex; gap: 8px; margin-top: 12px; }
   .solver-buttons button { flex: 1; font-size: 12px; padding: 9px 6px; }
@@ -256,7 +257,7 @@
         <button id="c-auto-solve" type="button" disabled>⚡ Solve whole cube</button>
       </div>
     </div>
-    <p class="hint-note">The full solver uses a two-phase 3×3 solving algorithm. Its solver library loads from a public CDN, so an internet connection is required the first time you calculate a solution.</p>
+    <p class="hint-note">The full solver follows the seven-stage beginner method and calculates each stage in a background worker. It does not need an external solver library or an internet connection.</p>
   </aside>
 </div>
 
@@ -312,6 +313,7 @@
   let zoom = 1;
   let last = 'Ready';
   let solutionMoves = [];
+  let solutionStages = [];
   let solutionIndex = 0;
   let solutionExpectedState = null;
   let solverReady = false;
@@ -457,34 +459,58 @@
     return 'Turn the ' + faceName + ' layer ' + turn + '. ' + why + reminder;
   }
 
+  function currentSolutionStage() {
+    let cursor = 0;
+    for (let i = 0; i < solutionStages.length; i++) {
+      const end = cursor + solutionStages[i].moves.length;
+      if (solutionIndex < end) return { stage: solutionStages[i], index: i, start: cursor };
+      cursor = end;
+    }
+    return null;
+  }
+
   function updateSolutionUI() {
-    const loaded=solutionMoves.length>0;
+    const loaded = solutionMoves.length > 0;
+    const current = currentSolutionStage();
     solutionProgress.textContent = loaded
-      ? (solutionIndex>=solutionMoves.length ? 'Solution complete! 🎉' : `Move ${solutionIndex+1} of ${solutionMoves.length}`)
+      ? (solutionIndex >= solutionMoves.length ? 'Solution complete! 🎉' :
+        `Stage ${current.index + 1} of 7 · ${current.stage.name} · Move ${solutionIndex + 1} of ${solutionMoves.length}`)
       : 'No solution loaded yet.';
-    nextMoveButton.disabled = !loaded || solutionIndex>=solutionMoves.length || busy;
-    autoSolveButton.disabled = !loaded || solutionIndex>=solutionMoves.length || busy;
+    nextMoveButton.disabled = !loaded || solutionIndex >= solutionMoves.length || busy;
+    autoSolveButton.disabled = !loaded || solutionIndex >= solutionMoves.length || busy;
     const stepSize = Number(stepSizeSelect.value || 1);
-    nextMoveButton.textContent = stepSize===3 ? '▶ Do 3 moves' : '▶ Do 1 move';
+    nextMoveButton.textContent = stepSize === 3 ? '▶ Do 3 moves' : '▶ Do 1 move';
     solutionList.replaceChildren();
-    if(!loaded) {
-      solutionList.textContent='Your solution moves will appear here.';
-      moveExplanation.innerHTML='<strong>How to read the moves</strong>Each explanation tells you which layer to turn, which way to turn it, and how the turn fits into the solver’s full plan.';
+    if (!loaded) {
+      solutionList.textContent = 'Your beginner-method moves will appear here, grouped into seven stages.';
+      moveExplanation.innerHTML = '<strong>How to read the moves</strong>Each stage follows the beginner method in order. The highlighted move is the next turn to make.';
       return;
     }
-    solutionMoves.forEach((move,i)=>{
-      if(i) solutionList.appendChild(document.createTextNode(' '));
-      const token=document.createElement('span');
-      token.textContent=move;
-      if(i===solutionIndex && solutionIndex<solutionMoves.length) token.className='current-move';
-      solutionList.appendChild(token);
+    let globalIndex = 0;
+    solutionStages.forEach((stage, stageIndex) => {
+      const heading = document.createElement('div');
+      heading.className = 'solution-stage-heading';
+      heading.textContent = `Stage ${stageIndex + 1}: ${stage.name}`;
+      solutionList.appendChild(heading);
+      stage.moves.forEach(move => {
+        if (globalIndex) solutionList.appendChild(document.createTextNode(' '));
+        const token = document.createElement('span');
+        token.textContent = move;
+        if (globalIndex === solutionIndex && solutionIndex < solutionMoves.length) token.className = 'current-move';
+        solutionList.appendChild(token);
+        globalIndex++;
+      });
     });
-    if(solutionIndex>=solutionMoves.length) {
-      moveExplanation.innerHTML='<strong>Why this worked</strong>The solver’s full sequence is finished. The turns worked together to put all the pieces back in their solved positions.';
+    if (solutionIndex >= solutionMoves.length) {
+      moveExplanation.innerHTML = '<strong>Beginner method complete! 🎉</strong>All seven stages are finished: the white cross, white corners, middle layer, yellow cross, matching yellow edges, positioning yellow corners, and twisting yellow corners.';
     } else {
-      moveExplanation.innerHTML='<strong>Why this move?</strong>'+explainMove(solutionMoves[solutionIndex], solutionIndex, solutionMoves.length);
+      moveExplanation.innerHTML = '<strong>Stage ' + (current.index + 1) + ' of 7 · ' + current.stage.name + '</strong>' +
+        explainMove(solutionMoves[solutionIndex], solutionIndex, solutionMoves.length);
     }
   }
+
+  const beginnerEngineSource = "// cube-engine.js\n// Core 3x3 cube model: 54 facelets, the 6 face turns, apply/scramble/solved.\n// Works in both Node (module.exports) and the browser (window.CubeEngine).\n//\n// Facelet layout (URFDLB, row-major per face):\n//   U = 0..8, R = 9..17, F = 18..26, D = 27..35, L = 36..44, B = 45..53\n//\n// A \"state\" is an Int array of length 54 where each entry is the face index\n// (0=U,1=R,2=F,3=D,4=L,5=B) that the sticker's COLOUR belongs to.\n// The cube is solved when state[i] === Math.floor(i / 9) for every i.\n//\n// Moves are generated from 3D sticker geometry (position + outward normal),\n// not hand-typed permutation tables, so the turn metric is correct by\n// construction. CW = clockwise when looking at that face from outside.\n\n(function (root, factory) {\n  if (typeof module !== 'undefined' && module.exports) module.exports = factory();\n  else root.CubeEngine = factory();\n})(typeof self !== 'undefined' ? self : this, function () {\n  'use strict';\n\n  var FACES = ['U', 'R', 'F', 'D', 'L', 'B'];\n\n  // ---- 3D geometry for every sticker -------------------------------------\n  // Coordinate frame: x = L(-1)..R(+1), y = D(-1)..U(+1), z = B(-1)..F(+1).\n  // Local (row r top->bottom, col c left->right as seen looking at the face\n  // from outside) maps to 3D as follows (derived once, verified by tests):\n  var pos = new Array(54), nor = new Array(54);\n\n  function setFace(base, fn, normal) {\n    for (var r = 0; r < 3; r++) {\n      for (var c = 0; c < 3; c++) {\n        var i = base + r * 3 + c;\n        pos[i] = fn(r, c);\n        nor[i] = normal.slice();\n      }\n    }\n  }\n  setFace(0,  function (r, c) { return [c - 1, 1, r - 1]; }, [0, 1, 0]);   // U\n  setFace(9,  function (r, c) { return [1, 1 - r, 1 - c]; }, [1, 0, 0]);   // R\n  setFace(18, function (r, c) { return [c - 1, 1 - r, 1]; }, [0, 0, 1]);   // F\n  setFace(27, function (r, c) { return [c - 1, -1, 1 - r]; }, [0, -1, 0]); // D\n  setFace(36, function (r, c) { return [-1, 1 - r, c - 1]; }, [-1, 0, 0]); // L\n  setFace(45, function (r, c) { return [1 - c, 1 - r, -1]; }, [0, 0, -1]); // B\n\n  function vkey(p, n) { return p[0] + ',' + p[1] + ',' + p[2] + '|' + n[0] + ',' + n[1] + ',' + n[2]; }\n  var slotByKey = {};\n  for (var i = 0; i < 54; i++) slotByKey[vkey(pos[i], nor[i])] = i;\n\n  // Rotate a vector by +/-90 degrees about an axis. s = sin(theta) (+1 or -1),\n  // cos(theta) = 0.\n  function rotv(v, axis, s) {\n    var x = v[0], y = v[1], z = v[2];\n    if (axis === 'x') return [x, -s * z, s * y];\n    if (axis === 'y') return [s * z, y, -s * x];\n    return [-s * y, s * x, z]; // z\n  }\n  function axisOf(p, axis) { return axis === 'x' ? p[0] : axis === 'y' ? p[1] : p[2]; }\n\n  // Build the CW quarter-turn permutation for one face.\n  // perm[j] = i means: after the turn, slot j shows what was at slot i.\n  function genMove(axis, layer, s) {\n    var perm = new Array(54);\n    for (var k = 0; k < 54; k++) perm[k] = k;\n    for (var k2 = 0; k2 < 54; k2++) {\n      if (axisOf(pos[k2], axis) === layer) {\n        var np = rotv(pos[k2], axis, s);\n        var nn = rotv(nor[k2], axis, s);\n        var j = slotByKey[vkey(np, nn)];\n        perm[j] = k2;\n      }\n    }\n    return perm;\n  }\n\n  // CW-from-outside: faces whose normal points along +axis use s=-1,\n  // faces along -axis use s=+1.\n  // Slice moves: M follows L (x-mid), E follows D (y-mid), S follows F (z-mid).\n  var base = {\n    U: genMove('y', 1, -1),\n    D: genMove('y', -1, 1),\n    R: genMove('x', 1, -1),\n    L: genMove('x', -1, 1),\n    F: genMove('z', 1, -1),\n    B: genMove('z', -1, 1),\n    M: genMove('x', 0, 1),\n    E: genMove('y', 0, 1),\n    S: genMove('z', 0, -1)\n  };\n\n  function compose(a, b) { // apply a, then b  => b after a\n    var r = new Array(54);\n    for (var k = 0; k < 54; k++) r[k] = a[b[k]];\n    return r;\n  }\n  function invert(p) {\n    var r = new Array(54);\n    for (var k = 0; k < 54; k++) r[p[k]] = k;\n    return r;\n  }\n\n  // Full move table: X, X', X2 for each face.\n  var MOVES = {};\n  ['U', 'R', 'F', 'D', 'L', 'B', 'M', 'E', 'S'].forEach(function (f) {\n    var p = base[f];\n    MOVES[f] = p;\n    MOVES[f + \"'\"] = invert(p);\n    MOVES[f + '2'] = compose(p, p);\n  });\n\n  function applyPerm(state, perm) {\n    var r = new Array(54);\n    for (var k = 0; k < 54; k++) r[k] = state[perm[k]];\n    return r;\n  }\n\n  function solvedState() {\n    var s = new Array(54);\n    for (var k = 0; k < 54; k++) s[k] = Math.floor(k / 9);\n    return s;\n  }\n\n  // Parse a move string like \"R U R' U2\" into a token list.\n  function parse(seq) {\n    if (Array.isArray(seq)) return seq.slice();\n    return seq.trim().length ? seq.trim().split(/\\s+/) : [];\n  }\n\n  function applySeq(state, seq) {\n    var toks = parse(seq), s = state;\n    for (var k = 0; k < toks.length; k++) {\n      var p = MOVES[toks[k]];\n      if (!p) throw new Error('Unknown move: ' + toks[k]);\n      s = applyPerm(s, p);\n    }\n    return s;\n  }\n\n  function isSolved(state) {\n    for (var k = 0; k < 54; k++) if (state[k] !== Math.floor(k / 9)) return false;\n    return true;\n  }\n\n  var ALL = [];\n  FACES.forEach(function (f) { ALL.push(f, f + \"'\", f + '2'); });\n\n  // Random scramble of n moves (avoids same-face repeats). rng() in [0,1).\n  function scramble(n, rng) {\n    rng = rng || Math.random;\n    var faces = FACES.slice(), out = [], last = null;\n    for (var k = 0; k < n; k++) {\n      var f;\n      do { f = faces[Math.floor(rng() * 6)]; } while (f === last);\n      last = f;\n      var suf = ['', \"'\", '2'][Math.floor(rng() * 3)];\n      out.push(f + suf);\n    }\n    return out;\n  }\n\n  function clone(state) { return state.slice(); }\n\n  return {\n    FACES: FACES,\n    MOVES: MOVES,\n    ALL_MOVES: ALL,\n    base: base,\n    pos: pos,\n    nor: nor,\n    solvedState: solvedState,\n    applyPerm: applyPerm,\n    applySeq: applySeq,\n    isSolved: isSolved,\n    scramble: scramble,\n    parse: parse,\n    clone: clone,\n    invert: invert,\n    compose: compose\n  };\n});\n";
+  const beginnerSolverSource = "// solver.js\n// Layer-by-layer 3x3 solver built on cube-engine.js.\n//\n// Design: the solve proceeds through the usual LBL stages (bottom cross ->\n// bottom corners -> middle edges -> last-layer orient -> last-layer permute).\n// Each stage is expressed as \"make this set of facelets correct while keeping\n// this other set correct\", and a small breadth-first search over a curated\n// move/algorithm library finds the shortest sequence that does it. This is\n// correct-by-search rather than correct-by-memorised-cases.\n//\n// Works in Node (module.exports) and the browser (window.CubeSolver).\n\n(function (root, factory) {\n  var E = (typeof require !== 'undefined') ? require('./cube-engine.js')\n        : (root.CubeEngine);\n  if (typeof module !== 'undefined' && module.exports) module.exports = factory(E);\n  else root.CubeSolver = factory(E);\n})(typeof self !== 'undefined' ? self : this, function (E) {\n  'use strict';\n\n  var MOVES = E.MOVES, applyPerm = E.applyPerm, parse = E.parse, pos = E.pos;\n\n  function solvedVal(i) { return Math.floor(i / 9); }\n\n  // ---- facelet index groups (derived from geometry, see comments) --------\n  // Bottom (D) cross edge slots: [D-sticker, side-sticker]\n  var CROSS = {\n    F: [28, 25], R: [32, 16], B: [34, 52], L: [30, 43]\n  };\n  // Bottom (D) corner slots: 3 facelets each\n  var FL_CORNERS = {\n    DRF: [29, 26, 15], DRB: [35, 17, 51], DBL: [33, 53, 42], DLF: [27, 44, 24]\n  };\n  // Middle (E) edge slots: 2 facelets each\n  var MID = {\n    FR: [23, 12], RB: [14, 48], BL: [50, 39], LF: [41, 21]\n  };\n\n  var U_FACE = [0, 1, 2, 3, 4, 5, 6, 7, 8];\n  var U_EDGES = [1, 3, 5, 7];\n  var U_CORNER_SIDES = [18, 20, 9, 11, 45, 47, 36, 38]; // top-row corner stickers of F,R,B,L\n  var ALL_IDX = []; for (var z = 0; z < 54; z++) ALL_IDX.push(z);\n  var F2L_IDX = ALL_IDX.filter(function (i) { return pos[i][1] !== 1; }); // not in U layer\n\n  function correct(state, idxs) {\n    for (var k = 0; k < idxs.length; k++) if (state[idxs[k]] !== solvedVal(idxs[k])) return false;\n    return true;\n  }\n\n  // ---- move-library relabelling (for generating slot variants) -----------\n  // y-rotation letter map: F->R->B->L->F, U/D fixed. Applied k times.\n  var YMAP = { U: 'U', D: 'D', F: 'R', R: 'B', B: 'L', L: 'F' };\n  function relabelTok(tok, k) {\n    var face = tok[0], suf = tok.slice(1);\n    for (var n = 0; n < k; n++) face = YMAP[face];\n    return face + suf;\n  }\n  function relabelSeq(seq, k) {\n    return parse(seq).map(function (t) { return relabelTok(t, k); }).join(' ');\n  }\n  function rotations(seq) {\n    var out = [];\n    for (var k = 0; k < 4; k++) out.push(relabelSeq(seq, k));\n    return out;\n  }\n\n  // ---- move libraries ----------------------------------------------------\n  var LIB_CROSS = ['U', \"U'\", 'U2', 'F', 'F2', \"F'\", 'R', 'R2', \"R'\",\n                   'B', 'B2', \"B'\", 'L', 'L2', \"L'\"];\n  var LIB_CORNER = ['U', \"U'\", 'U2', 'R', 'R2', \"R'\", 'F', 'F2', \"F'\",\n                    'L', 'L2', \"L'\", 'B', 'B2', \"B'\"];\n  // Middle: AUF + the two F2L edge-insert triggers, in all 4 slot rotations.\n  var LIB_MID = ['U', \"U'\", 'U2']\n    .concat(rotations(\"U R U' R' U' F' U F\"))\n    .concat(rotations(\"U' L' U L U F U' F'\"));\n  // Last layer:\n  var LIB_EO = ['U', \"U'\", 'U2', \"F R U R' U' F'\", \"F U R U' R' F'\"];\n  var LIB_CO = ['U', \"U'\", 'U2', \"R U R' U R U2 R'\", \"R U2 R' U' R U' R'\",\n                \"R' U' R U' R' U2 R\", \"L' U' L U' L' U2 L\"];\n  var LIB_CP = ['U', \"U'\", 'U2', \"R' F R' B2 R F' R' B2 R2\", \"R B' R F2 R' B R F2 R2\"];\n  var LIB_EP = ['U', \"U'\", 'U2', \"R U' R U R U R U' R' U' R2\",\n                \"R2 U R U R' U' R' U' R' U R'\"];\n\n  function applyTokens(state, tokens) {\n    var s = state;\n    for (var i = 0; i < tokens.length; i++) s = applyPerm(s, MOVES[tokens[i]]);\n    return s;\n  }\n\n  // Breadth-first search over a move library.\n  //  goalIdx     : facelets that must be correct at the end\n  //  preserveIdx : facelets that must also be correct at the end\n  //  maxDepth    : maximum number of LIBRARY STEPS (not move tokens)\n  //  prunePreserve: if true, require preserveIdx correct at EVERY node (only\n  //                 valid when every library entry preserves them) -> fast.\n  var CAP = 1500000; // node budget guard\n  function findSeq(start, lib, goalIdx, preserveIdx, maxDepth, prunePreserve, goalFn) {\n    var libTok = lib.map(parse);\n    // face of a single-move entry (null for multi-move algorithms)\n    var libFace = libTok.map(function (t) { return t.length === 1 ? t[0][0] : null; });\n    function done(s) { return (goalFn ? goalFn(s) : correct(s, goalIdx)) && correct(s, preserveIdx); }\n    if (done(start)) return [];\n    var visited = {}; visited[start.join('')] = 1;\n    var queue = [{ s: start, m: [], d: 0, lf: null }], head = 0;\n    while (head < queue.length) {\n      var node = queue[head++];\n      if (node.d >= maxDepth) continue;\n      for (var li = 0; li < libTok.length; li++) {\n        // same-face pruning, only between two single-move entries (safe: a\n        // shortest solution never has two consecutive same-face turns).\n        if (libFace[li] && node.lf && libFace[li] === node.lf) continue;\n        var ns = applyTokens(node.s, libTok[li]);\n        if (prunePreserve && !correct(ns, preserveIdx)) continue;\n        var key = ns.join('');\n        if (visited[key]) continue;\n        visited[key] = 1;\n        var nm = node.m.concat(libTok[li]);\n        if (done(ns)) return nm;\n        if (head + queue.length < CAP) {\n          queue.push({ s: ns, m: nm, d: node.d + 1, lf: libFace[li] });\n        }\n      }\n    }\n    return null;\n  }\n\n  // Collapse a token list: combine consecutive same-face turns, drop no-ops.\n  function simplify(tokens) {\n    var amt = { '': 1, \"'\": 3, '2': 2 };\n    var sufOf = [null, '', '2', \"'\"];\n    var out = tokens.slice();\n    var changed = true;\n    while (changed) {\n      changed = false;\n      var res = [];\n      for (var i = 0; i < out.length; i++) {\n        if (res.length) {\n          var prev = res[res.length - 1];\n          if (prev[0] === out[i][0]) {\n            var tot = (amt[prev.slice(1)] + amt[out[i].slice(1)]) % 4;\n            res.pop();\n            if (tot !== 0) res.push(out[i][0] + sufOf[tot]);\n            changed = true;\n            continue;\n          }\n        }\n        res.push(out[i]);\n      }\n      out = res;\n    }\n    return out;\n  }\n\n  // Seven-stage beginner method. The solver receives a virtual cube with\n  // white on D and yellow on U; the app maps moves back to its view afterward.\n  var TOP_SIDE_EDGES = [19, 10, 46, 37];\n  var TOP_CORNERS = (function () {\n    var groups = {};\n    for (var i = 0; i < 54; i++) {\n      var p = pos[i];\n      if (p[1] !== 1 || p[0] === 0 || p[2] === 0) continue;\n      var key = p.join(',');\n      (groups[key] || (groups[key] = [])).push(i);\n    }\n    return Object.keys(groups).map(function (key) { return groups[key]; }).filter(function (g) { return g.length === 3; });\n  })();\n  function cornersPositioned(state) {\n    for (var c = 0; c < TOP_CORNERS.length; c++) {\n      var idxs = TOP_CORNERS[c];\n      var wanted = idxs.map(solvedVal).sort().join(',');\n      var found = idxs.map(function (i) { return state[i]; }).sort().join(',');\n      if (found !== wanted) return false;\n    }\n    return true;\n  }\n  // Twist one top corner at a time with the beginner R' D' R D trigger.\n  var LIB_TWIST = ['U', \"U'\", 'U2', \"R' D' R D\"];\n  function buildPlan() {\n    var plan = [], acc = [];\n    ['F', 'R', 'B', 'L'].forEach(function (side) {\n      var g = CROSS[side];\n      plan.push({ stage: 'White cross', name: 'White cross: ' + side + ' edge', lib: LIB_CROSS,\n        goal: g, preserve: acc.slice(), depth: 7, prune: false });\n      acc = acc.concat(g);\n    });\n    ['DRF', 'DRB', 'DBL', 'DLF'].forEach(function (corner) {\n      var g = FL_CORNERS[corner];\n      plan.push({ stage: 'White corners', name: 'White corner: ' + corner, lib: LIB_CORNER,\n        goal: g, preserve: acc.slice(), depth: 8, prune: false });\n      acc = acc.concat(g);\n    });\n    var firstLayer = acc.slice();\n    ['FR', 'RB', 'BL', 'LF'].forEach(function (edge) {\n      plan.push({ stage: 'Middle-layer edges', name: 'Middle edge: ' + edge, lib: LIB_MID,\n        goal: MID[edge], preserve: firstLayer.concat(midSoFar(edge)), depth: 5, prune: true });\n    });\n    function midSoFar(upTo) {\n      var order = ['FR', 'RB', 'BL', 'LF'], result = [];\n      for (var i = 0; i < order.length && order[i] !== upTo; i++) result = result.concat(MID[order[i]]);\n      return result;\n    }\n    plan.push({ stage: 'Yellow cross', name: 'Yellow cross', lib: LIB_EO,\n      goal: U_EDGES, preserve: F2L_IDX, depth: 4, prune: true });\n    plan.push({ stage: 'Match yellow edges', name: 'Match yellow edges with side centers', lib: LIB_EP,\n      goal: TOP_SIDE_EDGES, preserve: F2L_IDX.concat(U_EDGES), depth: 6, prune: true });\n    plan.push({ stage: 'Position yellow corners', name: 'Position yellow corners', lib: LIB_CP,\n      goal: [], goalFn: cornersPositioned, preserve: F2L_IDX.concat(U_EDGES, TOP_SIDE_EDGES), depth: 6, prune: true });\n    plan.push({ stage: 'Twist yellow corners', name: 'Twist yellow corners', lib: LIB_TWIST,\n      goal: U_FACE, goalFn: function (state) { return correct(state, U_FACE) && cornersPositioned(state); },\n      preserve: F2L_IDX.concat(U_EDGES, TOP_SIDE_EDGES), depth: 14, prune: false });\n    return plan;\n  }\n  var PLAN = buildPlan();\n  function solve(state) {\n    var s = state.slice(), rawStages = [];\n    for (var i = 0; i < PLAN.length; i++) {\n      var st = PLAN[i];\n      var seq = findSeq(s, st.lib, st.goal, st.preserve, st.depth, st.prune, st.goalFn);\n      if (seq === null) throw new Error('Solver stuck at stage: ' + st.name);\n      s = applyTokens(s, seq);\n      rawStages.push({ name: st.stage, moves: seq });\n    }\n    var stages = [];\n    rawStages.forEach(function (stage) {\n      var last = stages[stages.length - 1];\n      if (!last || last.name !== stage.name) stages.push({ name: stage.name, moves: [] });\n      stages[stages.length - 1].moves = stages[stages.length - 1].moves.concat(stage.moves);\n    });\n    stages.forEach(function (stage) { stage.moves = simplify(stage.moves); });\n    var moves = [];\n    stages.forEach(function (stage) { moves = moves.concat(stage.moves); });\n    return { moves: moves, stages: stages, solved: E.isSolved(s) };\n  }\n  return { solve: solve, simplify: simplify, PLAN: PLAN };\n});\n";
 
   function getSolverWorker() {
     if (solverWorker) return solverWorker;
@@ -492,24 +518,39 @@
       throw new Error('This browser does not support background solving. Please update your browser.');
     }
     const workerCode = `
-      let ready = false;
+      ${beginnerEngineSource}
+      ${beginnerSolverSource}
+      const faceOrder = 'URFDLB';
+      const faceMap = [3, 1, 5, 0, 4, 2];
+      const backMap = { U: 'D', D: 'U', F: 'B', B: 'F', R: 'R', L: 'L' };
+      const E = self.CubeEngine;
+      const slotKey = (p, n) => p.join(',') + '|' + n.join(',');
+      const slotByKey = new Map(E.pos.map((p, i) => [slotKey(p, E.nor[i]), i]));
+      function toBeginnerOrientation(facelets) {
+        const state = facelets.split('').map(ch => faceOrder.indexOf(ch));
+        if (state.length !== 54 || state.some(n => n < 0)) throw new Error('Could not read all 54 stickers.');
+        const virtual = new Array(54);
+        for (let i = 0; i < 54; i++) {
+          const p = E.pos[i], n = E.nor[i];
+          const transformedPosition = [p[0], -p[1], -p[2]];
+          const transformedNormal = [n[0], -n[1], -n[2]];
+          const j = slotByKey.get(slotKey(transformedPosition, transformedNormal));
+          virtual[j] = faceMap[state[i]];
+        }
+        return virtual;
+      }
       self.onmessage = function(event) {
         const { id, facelets } = event.data || {};
         try {
-          if (!self.Cube) {
-            importScripts(
-              'https://cdn.jsdelivr.net/npm/cubejs@1.3.2/lib/cube.min.js',
-              'https://cdn.jsdelivr.net/npm/cubejs@1.3.2/lib/solve.js'
-            );
+          const virtualState = toBeginnerOrientation(facelets);
+          const result = self.CubeSolver.solve(virtualState);
+          const mapToken = token => backMap[token[0]] + token.slice(1);
+          const stages = result.stages.map(stage => ({ name: stage.name, moves: stage.moves.map(mapToken) }));
+          const moves = stages.reduce((all, stage) => all.concat(stage.moves), []);
+          if (!result.solved || !self.CubeEngine.isSolved(self.CubeEngine.applySeq(virtualState, result.moves))) {
+            throw new Error('The beginner-method solver could not verify its solution.');
           }
-          if (!ready) {
-            self.postMessage({ id, status: 'initializing' });
-            self.Cube.initSolver();
-            ready = true;
-          }
-          const cube = self.Cube.fromString(facelets);
-          const algorithm = cube.solve();
-          self.postMessage({ id, ok: true, algorithm });
+          self.postMessage({ id, ok: true, result: { moves, stages } });
         } catch (error) {
           self.postMessage({ id, ok: false, error: String(error && error.message || error) });
         }
@@ -537,7 +578,7 @@
         }
         worker.removeEventListener('message', handleMessage);
         worker.removeEventListener('error', handleError);
-        if (data.ok) resolve(data.algorithm);
+        if (data.ok) resolve(data.result);
         else reject(new Error(data.error || 'The solver could not calculate a solution.'));
       };
       const handleError = event => {
@@ -569,11 +610,12 @@
       if(!solutionMoves.length) {
         solverStatus.textContent='This cube is already solved. 🎉';
       } else {
-        solverStatus.textContent='Solution ready. Follow the highlighted move or solve the whole cube.';
+        solverStatus.textContent='Beginner-method solution ready. Follow the seven stages in order.';
       }
       updateSolutionUI();
     } catch(error) {
       solutionMoves=[];
+      solutionStages=[];
       solutionIndex=0;
       solutionExpectedState=null;
       solverStatus.textContent='The solver could not finish. You can keep using the cube; check your internet connection and try again.';
@@ -592,6 +634,7 @@
       if(signature()!==solutionExpectedState) {
         solverStatus.textContent='The cube changed since this solution was calculated. Find a fresh solution first.';
         solutionMoves=[];
+        solutionStages=[];
         solutionIndex=0;
         solutionExpectedState=null;
         updateSolutionUI();
@@ -612,6 +655,7 @@
     if(signature()!==solutionExpectedState) {
       solverStatus.textContent='The cube changed since this solution was calculated. Find a fresh solution first.';
       solutionMoves=[];
+      solutionStages=[];
       solutionIndex=0;
       solutionExpectedState=null;
       updateSolutionUI();
