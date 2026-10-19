@@ -602,9 +602,10 @@
     try {
       const facelets=cubeFacelets();
       if(facelets.length!==54 || facelets.includes('?')) throw new Error('Could not read all 54 cube stickers.');
-      const algorithm=await calculateSolutionInBackground(facelets);
+      const result=await calculateSolutionInBackground(facelets);
       solverReady=true;
-      solutionMoves=algorithm.trim() ? algorithm.trim().split(/\s+/) : [];
+      solutionStages=result.stages || [];
+      solutionMoves=result.moves || [];
       solutionIndex=0;
       solutionExpectedState=signature();
       if(!solutionMoves.length) {
