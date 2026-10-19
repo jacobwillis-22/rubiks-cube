@@ -950,11 +950,14 @@
   }
 
   function updateFaceLetterTransforms() {
-    // Keep each label anchored to its center sticker, but counter-rotate its glyph against the face and cube orientation.
+    // Refresh each center label and its accessible action whenever the view rotates.
+    // Face letters identify the cube's fixed move faces, not screen-relative sides.
     const inverseFace = { F:'', B:'rotateY(-180deg)', R:'rotateY(-90deg)', L:'rotateY(90deg)', U:'rotateX(-90deg)', D:'rotateX(90deg)' };
     root.querySelectorAll('.face-letter').forEach(letter => {
       const dir = letter.parentElement.dataset.dir || 'F';
+      letter.textContent = dir;
       letter.style.transform = `${inverseFace[dir]} rotateY(${-vy}deg) rotateX(${-vx}deg) translateZ(0.6px)`;
+      letter.parentElement.setAttribute('aria-label', 'Turn ' + dir + ' face');
     });
   }
 
