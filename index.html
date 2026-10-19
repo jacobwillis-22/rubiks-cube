@@ -92,7 +92,13 @@
   .hint-tip p { margin:5px 0 0; }
   .hint-steps { margin-top:20px; font-size:13px; }
   .hint-mini-title { font-weight:800; }
-  .hint-steps ol { padding-left:22px; line-height:1.85; margin:8px 0; }
+  .hint-steps ol { padding-left:0; list-style:none; line-height:1.55; margin:8px 0; }
+  .beginner-step { border:1px solid #8885; border-radius:9px; margin:7px 0; overflow:hidden; }
+  .beginner-step summary { cursor:pointer; padding:10px 11px; font-weight:750; background:color-mix(in srgb, CanvasText 5%, Canvas); }
+  .beginner-step summary::marker { color:#2563eb; }
+  .beginner-step-body { padding:10px 11px; line-height:1.55; }
+  .beginner-step-body p { margin:5px 0 9px; }
+  .beginner-step-body .algorithm { display:block; padding:8px; margin:7px 0; border-radius:7px; background:#8882; font-family:ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap:anywhere; }
   .hint-note { font-size:11px; line-height:1.5; opacity:.65; margin-top:20px; }
 
   .solver-box { margin-top: 20px; padding-top: 18px; border-top: 1px solid #8885; }
@@ -105,6 +111,7 @@
   .solver-buttons { display: flex; gap: 8px; margin-top: 12px; }
   .solver-buttons button { flex: 1; font-size: 12px; padding: 9px 6px; }
   .solver-step-size { width: 100%; margin-top: 6px; padding: 10px; border: 1px solid #8886; border-radius: 10px; background: Canvas; color: CanvasText; color-scheme: light dark; font: inherit; }
+  .solver-step-size option { background: Canvas; color: CanvasText; }
   .move-explanation { margin-top: 12px; padding: 11px; border-radius: 10px; background: #8881; font-size: 12px; line-height: 1.5; }
   .move-explanation strong { display: block; margin-bottom: 4px; }
   .features-panel { max-width: 700px; margin: 24px auto 8px; padding: 18px; border: 1px solid #8885; border-radius: 14px; }
@@ -181,7 +188,13 @@
     <div class="hint-steps">
       <div class="hint-mini-title">Beginner method</div>
       <ol>
-        <li>White cross</li><li>White corners</li><li>Middle-layer edges</li><li>Yellow cross</li><li>Match yellow edges</li><li>Position yellow corners</li><li>Twist yellow corners</li>
+        <li><details class="beginner-step"><summary>1. White cross</summary><div class="beginner-step-body"><p><strong>Goal:</strong> Make a white plus sign around the white center, and match each edge’s other color with its side center.</p><p><strong>How:</strong> Find a white edge piece (it has two colors). Bring it to the white face, line up its side color with the matching center, then place it beside the white center. Repeat for all four edges. Try to keep already-correct edges in place.</p><p>There isn’t one fixed algorithm for this step; solve the four edges one at a time.</p></div></details></li>
+        <li><details class="beginner-step"><summary>2. White corners</summary><div class="beginner-step-body"><p><strong>Goal:</strong> Complete the entire white face and the first layer’s side colors.</p><p><strong>How:</strong> Find a corner with white on it in the top layer. Match its two side colors to the centers where it belongs. Hold that target slot at the front-right, with the corner above it, then repeat the sequence until the corner is inserted correctly. Turn the top layer to set up the next corner.</p><span class="algorithm">R U R′ U′</span><p>If a white corner is stuck in the bottom layer incorrectly, use the sequence to bring it out, then set it up above its correct slot.</p></div></details></li>
+        <li><details class="beginner-step"><summary>3. Middle-layer edges</summary><div class="beginner-step-body"><p><strong>Goal:</strong> Place the four edges without yellow into the middle layer.</p><p><strong>How:</strong> Find a top-layer edge with no yellow. Turn U until the front-facing color matches the front center. Check the other color to decide whether the edge belongs on the right or left, then do the matching sequence.</p><p><strong>Insert to the right</strong></p><span class="algorithm">U R U′ R′ U′ F′ U F</span><p><strong>Insert to the left</strong></p><span class="algorithm">U′ L′ U L U F U′ F′</span><p>If an edge is in the middle layer but in the wrong slot, use either insertion sequence to take it out, then insert it correctly.</p></div></details></li>
+        <li><details class="beginner-step"><summary>4. Yellow cross</summary><div class="beginner-step-body"><p><strong>Goal:</strong> Make a yellow plus sign on the top face. The side colors do not need to match yet.</p><p><strong>How:</strong> Hold yellow on top. If you see a line, hold it horizontally; if you see an L shape, hold its yellow edges toward the back and left. If you see only the yellow center, start from any angle. Repeat the algorithm as needed until you have a cross.</p><span class="algorithm">F R U R′ U′ F′</span></div></details></li>
+        <li><details class="beginner-step"><summary>5. Match yellow edges</summary><div class="beginner-step-body"><p><strong>Goal:</strong> Make the four yellow-cross edge side colors match the side centers.</p><p><strong>How:</strong> Turn U and check the side stickers on the yellow edges. If two neighboring edges match, hold those matched edges at the back and right, then use the sequence. If the two matched edges are opposite, do the sequence once, check again, and set up the matching pair. Repeat until all four match.</p><span class="algorithm">R U R′ U R U2 R′ U</span><p>Keep yellow on top while doing this.</p></div></details></li>
+        <li><details class="beginner-step"><summary>6. Position yellow corners</summary><div class="beginner-step-body"><p><strong>Goal:</strong> Put each yellow corner in the correct location. Its yellow sticker may point sideways for now; that is okay.</p><p><strong>How:</strong> A corner is in the correct location when its three colors belong between those three centers. Find one correctly located corner and hold it at the front-right of the top layer. Do the algorithm, check the corners, and repeat as needed. If none is correct, do it once from any angle first.</p><span class="algorithm">U R U′ L′ U R′ U′ L</span><p>Do not worry about whether the yellow stickers point up yet; that is the next step.</p></div></details></li>
+        <li><details class="beginner-step"><summary>7. Twist yellow corners</summary><div class="beginner-step-body"><p><strong>Goal:</strong> Turn all yellow corner stickers upward without changing the cube’s final arrangement.</p><p><strong>How:</strong> Keep yellow on top. Put an unsolved yellow corner at the top-front-right position and repeat the sequence until its yellow sticker faces up (usually 2 or 4 repetitions). Then turn only the top layer (U) to bring the next unsolved corner to that same position and repeat. The cube may look scrambled during this step—keep going and do not rotate the whole cube.</p><span class="algorithm">R′ D′ R D</span><p>When all yellow corners face up, turn U to line up the sides. The cube should be solved.</p></div></details></li>
       </ol>
     </div>
     <div class="solver-box">
@@ -525,6 +538,7 @@
   }
   hintToggle.addEventListener('click', () => setHintPanel(!hintPanel.classList.contains('open')));
   findSolutionButton.addEventListener('click', findFullSolution);
+  stepSizeSelect.addEventListener('change', updateSolutionUI);
   nextMoveButton.addEventListener('click', applyNextSolutionMove);
   autoSolveButton.addEventListener('click', solveAllMoves);
   hintClose.addEventListener('click', () => setHintPanel(false));
