@@ -25,7 +25,7 @@
   .stage {
     height: 310px; position: relative; overflow: hidden; border-radius: 14px;
     background: radial-gradient(ellipse at center,#344352,#18222d 65%,#10161e);
-    touch-action: none; user-select: none;
+    touch-action: pan-y pinch-zoom; user-select: none;
   }
   .scene { position: absolute; inset: 0; perspective: 850px; }
   .root { position: absolute; left: 50%; top: 48%; width: 0; height: 0; transform-style: preserve-3d; will-change: transform; }
@@ -140,6 +140,7 @@
   let suppressClick = false;
   let vx = -25;
   let vy = -35;
+  let zoom = 1;
   let last = 'Ready';
 
   const status = app.querySelector('#c-status');
@@ -228,7 +229,7 @@
     }
 
     root.replaceChildren(fragment);
-    root.style.transform=`rotateX(${vx}deg) rotateY(${vy}deg)`;
+    root.style.transform=`scale(${zoom}) rotateX(${vx}deg) rotateY(${vy}deg)`;
     metrics();
   }
 
@@ -324,6 +325,14 @@
   async function turn(face,prime=false,record=true) {
     return turnMove(face+(prime?"'":""),record);
   }
+
+
+  // Zoom the cube with the mouse wheel or trackpad.
+  stage.addEventListener('wheel', event => {
+    event.preventDefault();
+    zoom = Math.max(0.6, Math.min(2.5, zoom * Math.exp(-event.deltaY * 0.0015)));
+    root.style.transform = `scale(${zoom}) rotateX(${vx}deg) rotateY(${vy}deg)`;
+  }, { passive: false });
 
   stage.addEventListener('pointerdown',event=>{
     const faceEl = event.target.closest('.face');
