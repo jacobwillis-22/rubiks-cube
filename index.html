@@ -154,6 +154,10 @@
   let busy = false;
   let drag = null;
   let suppressClick = false;
+  const activePointers = new Map();
+  let pinchStartDistance = 0;
+  let pinchStartZoom = 1;
+  let pinchActive = false;
   let vx = -25;
   let vy = -35;
   let zoom = 1;
@@ -351,6 +355,17 @@
   }, { passive: false });
 
   stage.addEventListener('pointerdown',event=>{
+    activePointers.set(event.pointerId, {x:event.clientX, y:event.clientY});
+    if (activePointers.size >= 2) {
+      const pts = [...activePointers.values()];
+      pinchStartDistance = Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
+      pinchStartZoom = zoom;
+      pinchActive = true;
+      drag = null;
+      stage.setPointerCapture(event.pointerId);
+      event.preventDefault();
+      return;
+    }
     const faceEl = event.target.closest('.face');
     const face = faceEl && faceEl.dataset.dir;
     // While scrambling, allow background drags to rotate the view, but don't
@@ -368,6 +383,17 @@
   });
 
   stage.addEventListener('pointermove',event=>{
+    if (activePointers.has(event.pointerId)) activePointers.set(event.pointerId, {x:event.clientX, y:event.clientY});
+    if (pinchActive && activePointers.size >= 2) {
+      const pts = [...activePointers.values()];
+      const distance = Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
+      if (pinchStartDistance > 0) {
+        zoom = Math.max(0.6, Math.min(2.5, pinchStartZoom * distance / pinchStartDistance));
+        root.style.transform = `scale(${zoom}) rotateX(${vx}deg) rotateY(${vy}deg)`;
+      }
+      event.preventDefault();
+      return;
+    }
     if(!drag||drag.id!==event.pointerId)return;
     const dx=event.clientX-drag.x;
     const dy=event.clientY-drag.y;
@@ -390,6 +416,12 @@
   });
 
   stage.addEventListener('pointerup',async event=>{
+    activePointers.delete(event.pointerId);
+    if (pinchActive) {
+      pinchActive = activePointers.size >= 2;
+      if (!pinchActive) { drag = null; }
+      return;
+    }
     if(!drag||drag.id!==event.pointerId)return;
     const g=drag;
     drag=null;
@@ -449,7 +481,12 @@
     await turnMove(move);
     setTimeout(()=>{suppressClick=false;},0);
   });
-  stage.addEventListener('pointercancel',()=>{drag=null;});
+  stage.addEventListener('pointercancel',event=>{
+    activePointers.delete(event.pointerId);
+    drag=null;
+    pinchActive=activePointers.size>=2;
+    if (!pinchActive) pinchStartDistance=0;
+  });
 
   app.querySelector('#c-undo').addEventListener('click',async()=>{
     if(busy||!history.length)return;
