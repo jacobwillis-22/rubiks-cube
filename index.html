@@ -26,7 +26,7 @@
   .stage {
     height: 310px; position: relative; overflow: hidden; border-radius: 14px;
     background: radial-gradient(ellipse at center,#344352,#18222d 65%,#10161e);
-    touch-action: pan-y pinch-zoom; user-select: none;
+    touch-action: none; user-select: none;
   }
   .scene { position: absolute; inset: 0; perspective: 850px; }
   .root { position: absolute; left: 50%; top: 48%; width: 0; height: 0; transform-style: preserve-3d; will-change: transform; }
@@ -822,8 +822,9 @@
       event.preventDefault();
       return;
     }
-    const faceEl = event.target.closest('.face');
-    const face = faceEl && faceEl.dataset.dir;
+    // Resolve the visible sticker/face even when the pointer lands on a child element.
+    const faceEl = event.target.closest('.face, .sticker');
+    const face = faceEl && (faceEl.classList.contains('face') ? faceEl.dataset.dir : faceEl.parentElement?.dataset.dir);
     // While scrambling, allow background drags to rotate the view, but don't
     // start a slice-turn gesture on the moving cubies.
     if(busy && face) return;
@@ -891,7 +892,13 @@
     }
     suppressClick=true;
     const piece=g.pieceId==null ? null : pieces.find(p=>p.id===g.pieceId);
-    if(!piece || !g.piecePosition) { setTimeout(()=>{suppressClick=false;},0); return; }
+    // If the gesture began on a face center (or hit-testing missed the cubie),
+    // still make the gesture do something useful instead of silently ignoring it.
+    if(!piece || !g.piecePosition) {
+      await turn(g.face, dx < 0);
+      setTimeout(()=>{suppressClick=false;},0);
+      return;
+    }
 
     // Choose the slice and turn direction by comparing the swipe with the
     // projected motion of the grabbed cubie for each possible quarter-turn.
@@ -930,7 +937,13 @@
         best={axis,score};
       }
     }
-    if(!best){setTimeout(()=>{suppressClick=false;},0);return;}
+    if(!best) {
+      // A center cubie has no off-center coordinate to identify a row/column.
+      // Treat its swipe as a turn of the face instead of doing nothing.
+      await turn(g.face, dx < 0);
+      setTimeout(()=>{suppressClick=false;},0);
+      return;
+    }
     const layer=g.piecePosition[best.axis];
     const sign=best.score>=0?1:-1;
     const move=['X','Y','Z'][best.axis]+layer+(sign<0?"'":"");
