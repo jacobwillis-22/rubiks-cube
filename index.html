@@ -975,11 +975,10 @@
     }
     const fixedToScreen={};
     for(const d of dirs){
-      const source=d==='R'||d==='L'?'R':d==='U'||d==='D'?'U':'F';
-      const v=fixedVectors[source], axis=axes[assignment[dirs.indexOf(source)===0?0:dirs.indexOf(source)===2?2:1]];
+      const sourceAxis=(d==='R'||d==='L')?0:(d==='U'||d==='D')?1:2;
+      const v=rotateToScreen(V[d]), axis=axes[assignment[sourceAxis]];
       const dot=v.reduce((sum,n,i)=>sum+n*axis.v[i],0);
-      const positive=dot>=0;
-      fixedToScreen[d]=(d==='R'||d==='L')?(positive?axis.positive:axis.negative):(d==='U'||d==='D')?(positive?axis.positive:axis.negative):(positive?axis.positive:axis.negative);
+      fixedToScreen[d]=dot>=0?axis.positive:axis.negative;
     }
     return fixedToScreen;
   }
