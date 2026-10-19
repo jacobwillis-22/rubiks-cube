@@ -1,0 +1,648 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rubik's Cube — Interactive Guide</title>
+<style>
+  :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+  body { margin: 0; padding: 16px; max-width: 980px; margin-inline: auto; }
+  body:has(#cube-app.fullscreen-mode) { max-width: none; padding: 0; }
+  #cube-app.fullscreen-mode, #cube-app:fullscreen {
+    position: fixed; inset: 0; z-index: 9999; overflow: auto;
+    box-sizing: border-box; padding: clamp(12px, 2.5vw, 28px);
+    background: Canvas; display: flex; flex-direction: column;
+  }
+  #cube-app.fullscreen-mode .stage, #cube-app:fullscreen .stage {
+    flex: 1; min-height: min(72vh, 760px); height: auto;
+  }
+  #cube-app.fullscreen-mode .scene, #cube-app:fullscreen .scene { perspective: 1100px; }
+  #cube-app.fullscreen-mode .heading-title, #cube-app:fullscreen .heading-title { font-size: clamp(21px, 3vw, 30px); }
+  #cube-app.fullscreen-mode .actions button, #cube-app:fullscreen .actions button { min-height: 46px; }
+  #c-fullscreen { white-space: nowrap; }
+  #cube-app { color: CanvasText; }
+  .stage {
+    height: 390px; position: relative; overflow: hidden; border-radius: 14px;
+    background: radial-gradient(ellipse at center,#344352,#18222d 65%,#10161e);
+    touch-action: none; user-select: none;
+  }
+  .scene { position: absolute; inset: 0; perspective: 850px; }
+  .root { position: absolute; left: 50%; top: 48%; width: 0; height: 0; transform-style: preserve-3d; will-change: transform; }
+  .cubie { position: absolute; width: 58px; height: 58px; left: -29px; top: -29px; transform-style: preserve-3d; backface-visibility: hidden; }
+  .face { position: absolute; width: 58px; height: 58px; background: #090b0e; border: 1px solid #07090b; border-radius: 4px; backface-visibility: hidden; }
+  .sticker { position: absolute; inset: 3px; border-radius: 4px; box-shadow: inset 0 1px 1px #ffffff45, inset 0 -2px 2px #0004; }
+  .face[data-dir="F"] { transform: translateZ(29px); }
+  .face[data-dir="B"] { transform: rotateY(180deg) translateZ(29px); }
+  .face[data-dir="R"] { transform: rotateY(90deg) translateZ(29px); }
+  .face[data-dir="L"] { transform: rotateY(-90deg) translateZ(29px); }
+  .face[data-dir="U"] { transform: rotateX(90deg) translateZ(29px); }
+  .face[data-dir="D"] { transform: rotateX(-90deg) translateZ(29px); }
+  .center { cursor: pointer; }
+  button {
+    border: 1px solid #8886; border-radius: 9px; background: Canvas; color: CanvasText;
+    padding: 10px 12px; font: inherit; font-weight: 650; cursor: pointer;
+  }
+  button:disabled { opacity: .45; cursor: default; }
+  .primary { background: #2563eb; color: white; border-color: transparent; }
+  .actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .actions button { flex: 1; min-width: 80px; }
+  .stats { display: flex; gap: 8px; margin-top: 10px; }
+  .stat { flex: 1; min-width: 0; padding: 9px; border: 1px solid #8886; border-radius: 10px; }
+  .muted { font-size: 12px; opacity: .7; }
+  .heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 8px; }
+  .heading-title { font-size: 19px; font-weight: 800; }
+  .count { font-size: 26px; font-weight: 800; text-align: right; }
+  .guide-toggle { white-space: nowrap; }
+  .guide-backdrop { position: fixed; inset: 0; z-index: 10000; background: #02061799; opacity: 0; pointer-events: none; transition: opacity .22s ease; }
+  .guide-backdrop.open { opacity: 1; pointer-events: auto; }
+  .guide-panel { position: fixed; z-index: 10001; top: 0; right: 0; bottom: 0; width: min(390px, 92vw); box-sizing: border-box; padding: 20px; overflow-y: auto; background: Canvas; color: CanvasText; border-left: 1px solid #8885; box-shadow: -18px 0 48px #0003; transform: translateX(105%); visibility: hidden; transition: transform .25s ease, visibility .25s; }
+  .guide-panel.open { transform: translateX(0); visibility: visible; }
+  .guide-top { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px; }
+  .guide-top h2 { margin:0; font-size:20px; }
+  .guide-card { border:1px solid #8885; border-radius:13px; padding:13px; margin:12px 0; }
+  .guide-card h3 { margin:0 0 7px; font-size:15px; }
+  .guide-card p, .guide-card li { font-size:14px; line-height:1.5; }
+  .guide-card p { margin:7px 0; }
+  .guide-card ul { padding-left:20px; margin:7px 0; }
+  .guide-art { display:flex; justify-content:center; align-items:center; gap:20px; width:100%; margin:10px auto 5px; }
+  .guide-grid { display:grid; grid-template-columns:repeat(3, 24px); gap:3px; padding:4px; background:#202833; border-radius:7px; border:2px solid #111827; }
+  .guide-grid span { width:24px; height:24px; border-radius:3px; background:#394452; }
+  .guide-grid.cross span { background:#394452; }
+  .guide-grid.cross span:nth-child(2), .guide-grid.cross span:nth-child(4), .guide-grid.cross span:nth-child(5), .guide-grid.cross span:nth-child(6), .guide-grid.cross span:nth-child(8) { background:#f7f7f3; }
+  .guide-grid.row span:nth-child(n+4):nth-child(-n+6) { background:#f7c948; }
+  .guide-grid.column span:nth-child(2), .guide-grid.column span:nth-child(5), .guide-grid.column span:nth-child(8) { background:#55d6a7; }
+  .guide-arrow { font-size:26px; font-weight:800; color:#f7c948; text-align:center; }
+  .guide-diagram-label { font-size:11px; text-align:center; margin-top:4px; opacity:.85; }
+  .guide-diagram { min-width:0; }
+  .guide-step { display:flex; gap:10px; align-items:flex-start; }
+  .guide-step-num { flex:0 0 27px; height:27px; border-radius:50%; display:grid; place-items:center; background:#2563eb; color:white; font-weight:800; }
+  .guide-note { font-size:12px; opacity:.7; }
+  @media (max-width: 520px) {
+    body { padding: 10px; }
+    .stage { height: 335px; }
+    .cubie { width: 46px; height: 46px; left: -23px; top: -23px; }
+    .face { width: 46px; height: 46px; }
+    .face[data-dir="F"] { transform: translateZ(23px); }
+    .face[data-dir="B"] { transform: rotateY(180deg) translateZ(23px); }
+    .face[data-dir="R"] { transform: rotateY(90deg) translateZ(23px); }
+    .face[data-dir="L"] { transform: rotateY(-90deg) translateZ(23px); }
+    .face[data-dir="U"] { transform: rotateX(90deg) translateZ(23px); }
+    .face[data-dir="D"] { transform: rotateX(-90deg) translateZ(23px); }
+    .heading { align-items:flex-start; }
+    .heading-title { font-size:18px; }
+    .heading .muted { max-width:220px; }
+    .stats { flex-wrap:wrap; }
+    .stat { min-width:100px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .guide-panel, .guide-backdrop { transition:none; } }
+</style>
+</head>
+<body>
+<div id="cube-app">
+  <div class="heading">
+    <div>
+      <div class="heading-title">Rubik’s Cube</div>
+      <div class="muted">Drag a row or column in your swipe direction · Drag background to rotate</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <button id="c-guide-open" class="guide-toggle" type="button" aria-controls="c-guide" aria-expanded="false">☷ Guide</button>
+      <button id="c-fullscreen" type="button" aria-label="Enter fullscreen">⛶ Fullscreen</button>
+      <div>
+        <div class="muted" style="text-align:right">MOVES</div>
+        <div class="count" id="c-count">0</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="stage" id="c-stage">
+    <div class="scene"><div class="root" id="c-root"></div></div>
+    <div class="muted" style="position:absolute;bottom:8px;left:0;right:0;text-align:center;color:#d1dbe5;pointer-events:none">
+      DRAG A ROW OR COLUMN · MOVE IT WITH YOUR SWIPE
+    </div>
+  </div>
+
+  <div class="actions">
+    <button id="c-scramble" class="primary">⤨ Scramble</button>
+    <button id="c-undo">↶ Undo</button>
+    <button id="c-reset">↻ Reset</button>
+  </div>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="muted">Puzzle</div>
+      <div id="c-state" style="font-weight:700">Solved</div>
+    </div>
+    <div class="stat">
+      <div class="muted">Last move</div>
+      <div id="c-last" style="font-weight:700">Ready</div>
+    </div>
+  </div>
+  <div id="c-status" class="muted" role="status" style="margin-top:10px">
+    Grab a sticker and drag in the direction you want its row or column to move. Drag the empty background to rotate your view.
+  </div>
+</div>
+
+<div id="c-guide-backdrop" class="guide-backdrop" aria-hidden="true"></div>
+<aside id="c-guide" class="guide-panel" role="dialog" aria-modal="true" aria-labelledby="c-guide-title" aria-hidden="true" inert>
+  <div class="guide-top">
+    <h2 id="c-guide-title">Cube Coach</h2>
+    <button id="c-guide-close" type="button" aria-label="Close guide">✕</button>
+  </div>
+  <div id="c-guide-content" aria-live="polite"></div>
+  <p class="guide-note">Tips update as the cube changes. The pictures are visual guides; they do not inspect a complete solving algorithm.</p>
+</aside>
+
+<script>
+// Show actionable diagnostics if a browser blocks or fails to run part of the widget.
+(() => {
+  function report(message) {
+    let panel = document.getElementById('c-error-report');
+    if (!panel) {
+      panel = document.createElement('pre');
+      panel.id = 'c-error-report';
+      panel.style.cssText = 'position:fixed;left:8px;right:8px;bottom:8px;z-index:20000;max-height:35vh;overflow:auto;white-space:pre-wrap;background:#7f1d1d;color:white;padding:12px;border-radius:8px;font:12px/1.4 monospace';
+      document.body.appendChild(panel);
+    }
+    panel.textContent = 'Rubik’s Cube diagnostic: ' + message;
+  }
+  window.addEventListener('error', event => report(event.message || 'A script or resource failed to load.'));
+  window.addEventListener('unhandledrejection', event => report(String(event.reason || 'An asynchronous operation failed.')));
+})();
+</script>
+<script>
+(() => {
+  const app = document.getElementById('cube-app');
+  const root = app.querySelector('#c-root');
+  const stage = app.querySelector('#c-stage');
+  const fullscreenButton = app.querySelector('#c-fullscreen');
+  const guidePanel = document.getElementById('c-guide');
+  const guideBackdrop = document.getElementById('c-guide-backdrop');
+  const guideContent = document.getElementById('c-guide-content');
+  const guideOpenButton = app.querySelector('#c-guide-open');
+
+  const colors = {
+    U:'#f7f7f3', D:'#ffd500', F:'#d92832',
+    B:'#ff791b', R:'#1768df', L:'#16a653'
+  };
+
+  const dirs = ['F','B','R','L','U','D'];
+  const V = {
+    F:[0,0,1], B:[0,0,-1], R:[1,0,0],
+    L:[-1,0,0], U:[0,1,0], D:[0,-1,0]
+  };
+  const AX = { U:1, D:1, R:0, L:0, F:2, B:2 };
+  const LA = { U:1, D:-1, R:1, L:-1, F:1, B:-1 };
+
+  let pieces = [];
+  let history = [];
+  let count = 0;
+  let busy = false;
+  let drag = null;
+  let suppressClick = false;
+  let vx = -25;
+  let vy = -35;
+  let last = 'Ready';
+  let hasScrambled = false;
+
+  const status = app.querySelector('#c-status');
+  const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+  function init() {
+    pieces = [];
+    let id = 0;
+
+    for (let x=-1; x<=1; x++)
+    for (let y=-1; y<=1; y++)
+    for (let z=-1; z<=1; z++) {
+      const s = {};
+      if (y===1) s.U=colors.U;
+      if (y===-1) s.D=colors.D;
+      if (z===1) s.F=colors.F;
+      if (z===-1) s.B=colors.B;
+      if (x===1) s.R=colors.R;
+      if (x===-1) s.L=colors.L;
+      pieces.push({id:id++, p:[x,y,z], s});
+    }
+  }
+
+  function signature() {
+    return pieces.slice().sort((a,b)=>a.id-b.id)
+      .map(p=>p.id+':'+p.p.join(',')+':'+dirs.map(d=>p.s[d]||'-').join(','))
+      .join(';');
+  }
+
+  let solved;
+
+  function metrics() {
+    app.querySelector('#c-count').textContent = count;
+    app.querySelector('#c-state').textContent =
+      signature()===solved ? 'Solved' : 'In progress';
+    app.querySelector('#c-last').textContent = last;
+    app.querySelector('#c-undo').disabled = busy || !history.length;
+    updateGuideContent();
+  }
+
+
+  function guidePicture(kind) {
+    const cells = '<span></span>'.repeat(9);
+    if (kind === 'solved') return `<div class="guide-art" role="img" aria-label="Solved cube illustration"><div class="guide-diagram"><div class="guide-grid">${'<span style="background:#f7f7f3"></span>'.repeat(9)}</div><div class="guide-diagram-label">Top: white</div></div><div class="guide-diagram"><div class="guide-grid">${'<span style="background:#d92832"></span>'.repeat(9)}</div><div class="guide-diagram-label">Front: red</div></div><div class="guide-diagram"><div class="guide-grid">${'<span style="background:#1768df"></span>'.repeat(9)}</div><div class="guide-diagram-label">Side: blue</div></div></div>`;
+    if (kind === 'slice') return `<div class="guide-art" role="img" aria-label="Row and column drag directions"><div class="guide-diagram"><div class="guide-grid row">${cells}</div><div class="guide-arrow">↔</div><div class="guide-diagram-label">DRAG A ROW</div></div><div class="guide-diagram"><div class="guide-grid column">${cells}</div><div class="guide-arrow" style="color:#55d6a7">↕</div><div class="guide-diagram-label">DRAG A COLUMN</div></div></div>`;
+    return `<div class="guide-art" role="img" aria-label="White cross solving goal"><div class="guide-diagram"><div class="guide-grid cross">${cells}</div><div class="guide-diagram-label">Target: white cross</div></div></div>`;
+  }
+
+  function updateGuideContent() {
+    if (!guideContent) return;
+    const isSolved = typeof solved !== 'undefined' && solved && signature() === solved;
+    let title, intro, picture, steps;
+    if (busy) {
+      title = 'Scramble in progress';
+      intro = 'Your cube is moving through a scramble. You can still rotate the view by dragging the empty background.';
+      picture = 'slice';
+      steps = ['Watch the cube from any angle while the moves play.', 'When the scramble finishes, start with the white cross.', 'Open this guide again for the next suggested step.'];
+    } else if (isSolved) {
+      title = 'Your cube is solved!';
+      intro = 'Every cubie is back in its solved position. You can scramble it for a new challenge or practice a few moves.';
+      picture = 'solved';
+      steps = ['Press Scramble for a fresh puzzle.', 'Drag a sticker to turn its row or column.', 'Use Undo to reverse your last recorded turn.'];
+    } else if (!hasScrambled && count === 0 && history.length === 0) {
+      title = 'Ready to begin';
+      intro = 'Your cube is currently in its starting state. Scramble it to create a puzzle, or practice the slice controls first.';
+      picture = 'slice';
+      steps = ['Press Scramble to mix the cube.', 'Drag a sticker horizontally to try a row turn.', 'Drag vertically to try a column turn; drag the background to rotate the view.'];
+    } else {
+      title = 'Next step: build the white cross';
+      intro = 'The cube is scrambled or partly solved. A useful beginner method starts by placing the four white edge pieces around the white center, while matching each edge’s other color to its side center.';
+      picture = 'cross';
+      steps = ['Find the white center and the four white edge pieces (each has two colors).', 'Move each white edge next to the white center to form a plus sign.', 'Check the side color of each edge matches its center. If you already have the cross, continue with the four first-layer corners.'];
+    }
+    guideContent.innerHTML = `<section class="guide-card"><h3>${title}</h3><p>${intro}</p>${guidePicture(picture)}</section><section class="guide-card"><h3>What to do next</h3>${steps.map((step,i)=>`<div class="guide-step"><span class="guide-step-num">${i+1}</span><p>${step}</p></div>`).join('')}</section><section class="guide-card"><h3>Controls</h3>${guidePicture('slice')}<ul><li><b>Sticker drag:</b> turn a row or column with your swipe.</li><li><b>Background drag:</b> rotate the view.</li><li><b>Undo:</b> reverse the most recent recorded move.</li></ul></section>`;
+  }
+
+  function setGuideOpen(open) {
+    guidePanel.classList.toggle('open', open);
+    guideBackdrop.classList.toggle('open', open);
+    guidePanel.setAttribute('aria-hidden', String(!open));
+    guidePanel.inert = !open;
+    guideBackdrop.setAttribute('aria-hidden', String(!open));
+    guideOpenButton.setAttribute('aria-expanded', String(open));
+    if (open) {
+      updateGuideContent();
+      app.querySelector('#c-guide-close').focus();
+    } else {
+      guideOpenButton.focus();
+    }
+  }
+
+  function render() {
+    const fragment = document.createDocumentFragment();
+    const unit = innerWidth < 520 ? 50 : 62;
+
+    for (const p of pieces) {
+      const el = document.createElement('div');
+      el.className='cubie';
+      el.dataset.id=p.id;
+      el.style.transform =
+        `translate3d(${p.p[0]*unit}px,${-p.p[1]*unit}px,${p.p[2]*unit}px)`;
+
+      for (const d of dirs) {
+        const f=document.createElement('div');
+        f.className='face';
+        f.dataset.dir=d;
+
+        const sticker=document.createElement('div');
+        sticker.className='sticker';
+        sticker.style.background=p.s[d]||'#17191d';
+        f.appendChild(sticker);
+
+        const center =
+          (d==='U'&&p.p[1]===1&&p.p[0]===0&&p.p[2]===0) ||
+          (d==='D'&&p.p[1]===-1&&p.p[0]===0&&p.p[2]===0) ||
+          (d==='F'&&p.p[2]===1&&p.p[0]===0&&p.p[1]===0) ||
+          (d==='B'&&p.p[2]===-1&&p.p[0]===0&&p.p[1]===0) ||
+          (d==='R'&&p.p[0]===1&&p.p[1]===0&&p.p[2]===0) ||
+          (d==='L'&&p.p[0]===-1&&p.p[1]===0&&p.p[2]===0);
+
+        if (center) {
+          f.classList.add('center');
+          f.tabIndex=0;
+          f.setAttribute('role','button');
+          f.setAttribute('aria-label','Turn '+d+' face');
+
+          f.addEventListener('keydown',e=>{
+            if(e.key==='Enter'||e.key===' ') {
+              e.preventDefault();
+              turn(d);
+            }
+          });
+        }
+        el.appendChild(f);
+      }
+      fragment.appendChild(el);
+    }
+
+    root.replaceChildren(fragment);
+    root.style.transform=`rotateX(${vx}deg) rotateY(${vy}deg)`;
+    metrics();
+  }
+
+  function rotateVector(a,k,s) {
+    const [x,y,z]=a;
+    if(k===0) return s===1 ? [x,-z,y] : [x,z,-y];
+    if(k===1) return s===1 ? [z,y,-x] : [-z,y,x];
+    return s===1 ? [-y,x,z] : [y,-x,z];
+  }
+
+  function rotatedDirection(d,k,s) {
+    const q=rotateVector(V[d],k,s);
+    return Object.keys(V).find(n=>V[n].every((v,i)=>v===q[i]));
+  }
+
+  function moveInfo(move) {
+    const generalized = move.match(/^([XYZ])(-1|0|1)(\'?)/);
+    if (generalized) {
+      return {axis:{X:0,Y:1,Z:2}[generalized[1]], layer:Number(generalized[2]),
+        sign:generalized[3] ? -1 : 1};
+    }
+    const face=move[0], axis=AX[face], layer=LA[face];
+    return {axis, layer, sign:(layer===1 ? -1 : 1) * (move.endsWith("'") ? -1 : 1)};
+  }
+
+  function apply(move) {
+    const {axis,layer,sign}=moveInfo(move);
+    for (const p of pieces) {
+      if (p.p[axis]===layer) {
+        p.p=rotateVector(p.p,axis,sign);
+        const next={};
+        for (const [d,c] of Object.entries(p.s)) next[rotatedDirection(d,axis,sign)]=c;
+        p.s=next;
+      }
+    }
+  }
+
+  const inverse = move => move.endsWith("'") ? move.slice(0,-1) : move+"'";
+
+  function lock(value) {
+    busy=value;
+    app.querySelectorAll('button').forEach(button=>{
+      if (button.id === 'c-guide-open' || button.id === 'c-fullscreen') return;
+      button.disabled=value;
+    });
+    if(!value) metrics();
+  }
+
+  async function animate(move) {
+    const {axis,layer,sign}=moveInfo(move);
+    const selected=pieces.filter(p=>p.p[axis]===layer);
+    const nodes=selected.map(p=>root.querySelector(`[data-id="${p.id}"]`));
+    if(nodes.length!==9||nodes.some(n=>!n)) throw Error('Could not find slice cubies');
+    const wrapper=document.createElement('div');
+    wrapper.style.cssText='position:absolute;left:0;top:0;width:0;height:0;transform-style:preserve-3d;pointer-events:none';
+    root.appendChild(wrapper);
+    nodes.forEach(node=>wrapper.appendChild(node));
+    const visualSign=axis===1?sign:-sign;
+    const axisName=['X','Y','Z'][axis];
+    wrapper.style.willChange='transform';
+    wrapper.style.transition='transform 240ms cubic-bezier(.22,.75,.25,1)';
+    void wrapper.offsetWidth;
+    await new Promise(resolve=>{
+      let finished=false;
+      const done=()=>{if(finished)return;finished=true;wrapper.removeEventListener('transitionend',onEnd);resolve();};
+      const onEnd=e=>{if(e.target===wrapper&&e.propertyName==='transform')done();};
+      wrapper.addEventListener('transitionend',onEnd);
+      requestAnimationFrame(()=>{
+        wrapper.style.transform=`rotate${axisName}(${90*visualSign}deg)`;
+        setTimeout(done,310);
+      });
+    });
+    apply(move);
+    nodes.forEach(node=>root.appendChild(node));
+    wrapper.remove();
+    render();
+  }
+
+  async function turnMove(move,record=true) {
+    if(busy)return;
+    lock(true);
+    try {
+      await animate(move);
+      if(record) { history.push(move); count++; }
+      last=move;
+      status.textContent='Turned '+move+'.';
+    } catch(error) {
+      render();
+      status.textContent='Recovered after a rendering issue.';
+    } finally {
+      lock(false);
+      render();
+    }
+  }
+
+  async function turn(face,prime=false,record=true) {
+    return turnMove(face+(prime?"'":""),record);
+  }
+
+  stage.addEventListener('pointerdown',event=>{
+    const faceEl = event.target.closest('.face');
+    const face = faceEl && faceEl.dataset.dir;
+    // While scrambling, allow background drags to rotate the view, but don't
+    // start a slice-turn gesture on the moving cubies.
+    if(busy && face) return;
+    const cubieEl = event.target.closest('.cubie');
+    const piece = cubieEl && pieces.find(p=>p.id===Number(cubieEl.dataset.id));
+    drag={x:event.clientX,y:event.clientY,startX:event.clientX,startY:event.clientY,
+      id:event.pointerId,face:face || null,pieceId:piece ? piece.id : null,
+      piecePosition:piece ? [...piece.p] : null,moved:false};
+    stage.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  });
+
+  stage.addEventListener('pointermove',event=>{
+    if(!drag||drag.id!==event.pointerId)return;
+    const dx=event.clientX-drag.x;
+    const dy=event.clientY-drag.y;
+    const totalX=event.clientX-drag.startX;
+    const totalY=event.clientY-drag.startY;
+    if(Math.hypot(totalX,totalY)>8) drag.moved=true;
+
+    if(drag.face) {
+      // Face gestures are reserved for turning a layer; they never rotate the whole cube.
+      drag.x=event.clientX; drag.y=event.clientY;
+      return;
+    }
+
+    drag.x=event.clientX;
+    drag.y=event.clientY;
+    const horizontalSign=Math.cos(vx*Math.PI/180)<0?-1:1;
+    vy+=dx*0.65*horizontalSign;
+    vx-=dy*0.65;
+    root.style.transform=`rotateX(${vx}deg) rotateY(${vy}deg)`;
+  });
+
+  stage.addEventListener('pointerup',async event=>{
+    if(!drag||drag.id!==event.pointerId)return;
+    const g=drag;
+    drag=null;
+    if(!g.face || busy)return;
+    const dx=event.clientX-g.startX;
+    const dy=event.clientY-g.startY;
+    if(Math.hypot(dx,dy)<9) {
+      // A tap still turns the selected face in its default direction.
+      await turn(g.face);
+      return;
+    }
+    suppressClick=true;
+    const piece=g.pieceId==null ? null : pieces.find(p=>p.id===g.pieceId);
+    if(!piece || !g.piecePosition) { setTimeout(()=>{suppressClick=false;},0); return; }
+
+    // Choose the slice and turn direction by comparing the swipe with the
+    // projected motion of the grabbed cubie for each possible quarter-turn.
+    // This works for all six faces and after rotating the cube in 3D.
+    const swipe=[dx,-dy];
+    const length=Math.hypot(...swipe);
+    const normalAxis=({R:0,L:0,U:1,D:1,F:2,B:2})[g.face];
+    const cosX=Math.cos(vx*Math.PI/180), sinX=Math.sin(vx*Math.PI/180);
+    const cosY=Math.cos(vy*Math.PI/180), sinY=Math.sin(vy*Math.PI/180);
+    const projectVector=v=>{
+      // CSS transform is rotateX(vx) rotateY(vy).
+      const x1=cosY*v[0]+sinY*v[2];
+      const y1=v[1];
+      const z1=-sinY*v[0]+cosY*v[2];
+      const y2=cosX*y1-sinX*z1;
+      return [x1,-y2];
+    };
+    const cross=(a,b)=>[
+      a[1]*b[2]-a[2]*b[1],
+      a[2]*b[0]-a[0]*b[2],
+      a[0]*b[1]-a[1]*b[0]
+    ];
+    let best=null;
+    for(let axis=0;axis<3;axis++){
+      if(axis===normalAxis)continue; // a face swipe turns rows/columns within that face
+      const unit=[0,0,0]; unit[axis]=1;
+      // Piece coordinates use +Y upward, while CSS screen coordinates use
+      // +Y downward. Convert the logical rotation velocity before projecting
+      // it, otherwise some rows/columns appear to move in the opposite direction.
+      const logicalVelocity=cross(unit,g.piecePosition);
+      const velocity=projectVector([logicalVelocity[0],-logicalVelocity[1],logicalVelocity[2]]);
+      const vlen=Math.hypot(...velocity);
+      if(vlen<0.001)continue;
+      const score=(velocity[0]*swipe[0]+velocity[1]*swipe[1])/(vlen*length);
+      if(!best||Math.abs(score)>Math.abs(best.score)){
+        best={axis,score};
+      }
+    }
+    if(!best){setTimeout(()=>{suppressClick=false;},0);return;}
+    const layer=g.piecePosition[best.axis];
+    const sign=best.score>=0?1:-1;
+    const move=['X','Y','Z'][best.axis]+layer+(sign<0?"'":"");
+    await turnMove(move);
+    setTimeout(()=>{suppressClick=false;},0);
+  });
+  stage.addEventListener('pointercancel',()=>{drag=null;});
+
+  app.querySelector('#c-undo').addEventListener('click',async()=>{
+    if(busy||!history.length)return;
+
+    const move=history.pop();
+    await turnMove(inverse(move),false);
+    count=Math.max(0,count-1);
+    last='Undo '+move;
+    metrics();
+  });
+
+  app.querySelector('#c-reset').addEventListener('click',()=>{
+    if(busy)return;
+
+    init();
+    history=[];
+    count=0;
+    hasScrambled=false;
+    vx=-25;
+    vy=-35;
+    last='Reset';
+    status.textContent='Cube reset.';
+    render();
+  });
+
+  app.querySelector('#c-scramble').addEventListener('click',async()=>{
+    if(busy)return;
+
+    lock(true);
+    history=[];
+    count=0;
+
+    const sequence=[];
+    let previous='';
+
+    for(let i=0;i<20;i++) {
+      let face;
+      do {
+        face='UDLRFB'[Math.floor(Math.random()*6)];
+      } while(face===previous);
+
+      previous=face;
+      sequence.push(face+(Math.random()<0.5?"'":''));
+    }
+
+    try {
+      for(let i=0;i<sequence.length;i++) {
+        await animate(sequence[i]);
+        status.textContent=`Scrambling ${i+1}/20`;
+      }
+    } catch(error) {
+      render();
+    }
+
+    last='Scramble';
+    hasScrambled=true;
+    status.textContent='Scramble complete.';
+    lock(false);
+    render();
+  });
+
+
+  guideOpenButton.addEventListener('click', () => setGuideOpen(true));
+  app.querySelector('#c-guide-close').addEventListener('click', () => setGuideOpen(false));
+  guideBackdrop.addEventListener('click', () => setGuideOpen(false));
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && guidePanel.classList.contains('open')) setGuideOpen(false);
+  });
+
+  async function toggleFullscreen() {
+    try {
+      if (document.fullscreenElement === app) {
+        await document.exitFullscreen();
+      } else if (app.requestFullscreen) {
+        await app.requestFullscreen();
+      } else {
+        app.classList.toggle('fullscreen-mode');
+      }
+    } catch (error) {
+      // Keep a CSS fullscreen fallback for browsers that block the API.
+      app.classList.toggle('fullscreen-mode');
+    }
+    updateFullscreenButton();
+    render();
+  }
+
+  function updateFullscreenButton() {
+    const active = document.fullscreenElement === app || app.classList.contains('fullscreen-mode');
+    fullscreenButton.textContent = active ? '⤢ Exit fullscreen' : '⛶ Fullscreen';
+    fullscreenButton.setAttribute('aria-label', active ? 'Exit fullscreen' : 'Enter fullscreen');
+  }
+
+  fullscreenButton.addEventListener('click', toggleFullscreen);
+  document.addEventListener('fullscreenchange', () => {
+    updateFullscreenButton();
+    render();
+  });
+  window.addEventListener('resize', () => render());
+
+  init();
+  solved=signature();
+  render();
+})();
+</script>
+</body>
+</html>
