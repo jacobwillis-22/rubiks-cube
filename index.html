@@ -40,7 +40,7 @@
   .face[data-dir="U"] { transform: rotateX(90deg) translateZ(24px); }
   .face[data-dir="D"] { transform: rotateX(-90deg) translateZ(24px); }
   .center { cursor: pointer; }
-  .face-letter { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font:900 18px/1 Arial,sans-serif; color:#111; text-shadow:0 1px 1px #ffffff90; pointer-events:none; user-select:none; }
+  .face-letter { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font:900 18px/1 Arial,sans-serif; color:#111; text-shadow:0 1px 1px #ffffff90; pointer-events:none; user-select:none; transform:translateZ(0.6px); transform-style:preserve-3d; backface-visibility:hidden; }
   #cube-app.hide-face-letters .face-letter { display:none; }
   .face-letter-control { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:9px 0; font-size:13px; }
   .face-letter-control label { display:flex; align-items:center; gap:8px; cursor:pointer; }
